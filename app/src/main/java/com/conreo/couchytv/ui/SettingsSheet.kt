@@ -160,20 +160,24 @@ fun SettingsSheet(
     // so reading it requires READ_EXTERNAL_STORAGE. Ask for it before opening a picker
     // and hand the selection back once it is granted.
     var pendingPick by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingDenied by remember { mutableStateOf<(() -> Unit)?>(null) }
     val storagePermission = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
     ) { granted ->
         val action = pendingPick
+        val denied = pendingDenied
         pendingPick = null
+        pendingDenied = null
         if (granted) action?.invoke()
-        else Actions.toast(context, "Storage permission needed to pick a file")
+        else denied?.invoke()
     }
-    fun pickWithStorage(action: () -> Unit) {
+    fun pickWithStorage(onDenied: (() -> Unit)? = null, action: () -> Unit) {
         val needed = Build.VERSION.SDK_INT in 23..32 &&
             context.checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         if (!needed) action() else {
             pendingPick = action
+            pendingDenied = onDenied
             storagePermission.launch(android.Manifest.permission.READ_EXTERNAL_STORAGE)
         }
     }
@@ -301,6 +305,40 @@ fun SettingsSheet(
                                 runCatching { videoPicker.launch(arrayOf("video/*")) }
                                     .onFailure { Actions.toast(context, context.getString(R.string.toast_no_picker)) }
                             }
+                        },
+                        onToggleSlideshow = {
+                            val turningOn = !config.slideshow
+                            pickWithStorage(
+                                onDenied = { Actions.toast(context, "Storage permission needed for the slideshow") },
+                            ) {
+                                scope.launch {
+                                    if (turningOn) {
+                                        val ok = withContext(Dispatchers.IO) {
+                                            com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
+                                        }
+                                        if (!ok) {
+                                            Actions.toast(context, context.getString(R.string.slideshow_empty))
+                                            return@launch
+                                        }
+                                        store.update {
+                                            it.copy(
+                                                slideshow = true,
+                                                useCustomWallpaper = true,
+                                                useVideoWallpaper = false,
+                                                useBuiltinAerials = false,
+                                            )
+                                        }
+                                        onWallpaperChanged()
+                                        Actions.toast(context, "Slideshow on")
+                                    } else {
+                                        store.update { it.copy(slideshow = false) }
+                                        Actions.toast(context, "Slideshow off")
+                                    }
+                                }
+                            }
+                        },
+                        onSetSlideshowMinutes = { m ->
+                            scope.launch { store.update { it.copy(slideshowMinutes = m) } }
                         },
                     )
                     SettingsScreen.Display -> DisplayScreen(
@@ -1311,6 +1349,8 @@ private fun WallpaperScreen(
     onPreset: (Int) -> Unit,
     onPickPhoto: () -> Unit,
     onPickVideo: () -> Unit,
+    onToggleSlideshow: () -> Unit,
+    onSetSlideshowMinutes: (Int) -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -1381,8 +1421,31 @@ private fun WallpaperScreen(
             headlineContent = { Text(stringResource(R.string.pick_photo)) },
             supportingContent = { Text(stringResource(R.string.pick_photo_sub)) },
             leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useCustomWallpaper) },
+            trailingContent = { CheckMark(checked = config.useCustomWallpaper && !config.slideshow) },
         )
+
+        // Slideshow — rotate through every image in Pictures/Slideshow.
+        SettingsItem(
+            selected = false, onClick = onToggleSlideshow,
+            headlineContent = { Text(stringResource(R.string.slideshow)) },
+            supportingContent = { Text(stringResource(R.string.slideshow_sub)) },
+            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
+            trailingContent = { CheckMark(checked = config.useCustomWallpaper && config.slideshow) },
+        )
+        if (config.useCustomWallpaper && config.slideshow) {
+            val minuteChoices = listOf(1, 5, 10, 15, 30, 60)
+            val mi = minuteChoices.indexOf(config.slideshowMinutes)
+                .let { if (it >= 0) it else 2 }
+            SelectorRow(
+                label = stringResource(R.string.slideshow_every),
+                value = "${
+                    minuteChoices[mi]
+                } min",
+                steps = minuteChoices.size,
+                current = mi,
+                onSelect = { v -> onSetSlideshowMinutes(minuteChoices[v]) },
+            )
+        }
 
         /* ---------------- VIDEO: built-in aerials + your own video ---------------- */
         SectionLabel(stringResource(R.string.wp_section_video))

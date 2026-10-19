@@ -36,6 +36,10 @@ data class LauncherConfig(
     val knownApps: Set<String> = emptySet(),
     val wallpaper: Int = 1, // Aurora
     val useCustomWallpaper: Boolean = false,
+    /** rotate through the images in Pictures/Slideshow instead of one fixed photo */
+    val slideshow: Boolean = false,
+    /** minutes between slideshow changes */
+    val slideshowMinutes: Int = 10,
     /** video wallpaper: persisted content-URI of a local video, looped muted */
     val videoUri: String = "",
     val useVideoWallpaper: Boolean = false,

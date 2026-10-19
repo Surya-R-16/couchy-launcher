@@ -510,6 +510,20 @@ fun LauncherApp(rescanTick: Int) {
         if (movePkg != null) runCatching { moveFocus.requestFocus() }
     }
 
+    // Slideshow: swap in a random image from Pictures/Slideshow on every resume (so each
+    // boot differs) and then on the configured interval while the launcher is visible.
+    LaunchedEffect(config.slideshow, config.slideshowMinutes, config.useCustomWallpaper, resumeTick) {
+        if (!config.slideshow || !config.useCustomWallpaper) return@LaunchedEffect
+        val every = config.slideshowMinutes.coerceIn(1, 240) * 60_000L
+        while (true) {
+            val changed = withContext(Dispatchers.IO) {
+                com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
+            }
+            if (changed) wallpaperVersion++
+            delay(every)
+        }
+    }
+
     // ----- wallpaper: decoded off the main thread, downsampled, cached.
     // A ~100px copy is decoded alongside: upscaled by the GPU it looks
     // blurred, and crossfading it in costs one texture blend per frame
