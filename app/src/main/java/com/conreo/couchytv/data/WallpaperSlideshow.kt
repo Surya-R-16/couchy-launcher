@@ -44,16 +44,34 @@ object WallpaperSlideshow {
         val copied = runCatching {
             val input = context.contentResolver.openInputStream(pick.uri)
                 ?: error("cannot read ${pick.name}")
-            input.use { i ->
-                File(context.filesDir, TARGET).outputStream().use { o -> i.copyTo(o) }
-            }
-        }.isSuccess
+            writeWallpaper(context, input)
+        }.getOrDefault(false)
         if (copied) {
             runCatching { lastFile.writeText(pick.name) }
             runCatching { stamp.writeText(System.currentTimeMillis().toString()) }
         }
         return copied
     }
+
+    /**
+     * Copies [input] over files/wallpaper.jpg atomically.
+     *
+     * Writing the target in place let the launcher decode a half-written file whenever a
+     * slideshow change landed while the wallpaper was being read — the home screen showed
+     * torn bands of the JPEG. The bytes go to a temporary file first and are renamed over
+     * the target, which the filesystem does in one step, so a reader sees either the old
+     * image or the new one.
+     */
+    fun writeWallpaper(context: Context, input: java.io.InputStream): Boolean = runCatching {
+        val target = File(context.filesDir, TARGET)
+        val tmp = File(context.filesDir, "$TARGET.tmp")
+        tmp.outputStream().use { out -> input.use { it.copyTo(out) } }
+        if (!tmp.renameTo(target)) {
+            target.delete()
+            if (!tmp.renameTo(target)) error("rename failed")
+        }
+        true
+    }.getOrDefault(false)
 
     /** When the wallpaper last changed, epoch millis; 0 when it never has. */
     fun lastChangeMs(context: Context): Long =

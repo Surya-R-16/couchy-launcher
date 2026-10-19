@@ -128,10 +128,8 @@ fun SettingsSheet(
                 runCatching {
                     val input = context.contentResolver.openInputStream(uri)
                         ?: error("cannot read $uri")
-                    input.use { i ->
-                        File(context.filesDir, "wallpaper.jpg").outputStream().use { out ->
-                            i.copyTo(out)
-                        }
+                    check(com.conreo.couchytv.data.WallpaperSlideshow.writeWallpaper(context, input)) {
+                        "could not write the wallpaper"
                     }
                 }
             }
