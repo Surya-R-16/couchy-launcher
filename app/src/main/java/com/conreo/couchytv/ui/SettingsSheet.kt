@@ -1,7 +1,6 @@
 package com.conreo.couchytv.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -80,6 +79,7 @@ import com.conreo.couchytv.data.LAYOUT_GRID
 import com.conreo.couchytv.data.LauncherConfig
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.runtime.withFrameNanos
+import com.conreo.couchytv.util.OpenDocumentOrGetContent
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -110,7 +110,7 @@ fun SettingsSheet(
     // Same document-picker flow as videos: opens the system file manager,
     // works with USB drives and network storage providers.
     val photoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        OpenDocumentOrGetContent()
     ) { uri ->
         if (uri != null) {
             scope.launch {
@@ -136,7 +136,7 @@ fun SettingsSheet(
     // Video wallpaper: keep a persistable read grant and stream in place —
     // aerial files are hundreds of MB, never copied.
     val videoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        OpenDocumentOrGetContent()
     ) { uri ->
         if (uri != null) {
             runCatching {
@@ -816,7 +816,7 @@ private fun LauncherSettingsSubscreen(
     }
 
     val loadPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
+        OpenDocumentOrGetContent()
     ) { uri ->
         if (uri != null) {
             scope.launch {
