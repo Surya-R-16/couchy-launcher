@@ -510,17 +510,24 @@ fun LauncherApp(rescanTick: Int) {
         if (movePkg != null) runCatching { moveFocus.requestFocus() }
     }
 
-    // Slideshow: swap in a random image from Pictures/Slideshow on every resume (so each
-    // boot differs) and then on the configured interval while the launcher is visible.
+    // Slideshow: change only when the configured interval has actually elapsed. Keying this
+    // to every resume made pressing HOME swap the background, because returning from an app
+    // is an ON_RESUME like any other.
     LaunchedEffect(config.slideshow, config.slideshowMinutes, config.useCustomWallpaper, resumeTick) {
         if (!config.slideshow || !config.useCustomWallpaper) return@LaunchedEffect
         val every = config.slideshowMinutes.coerceIn(1, 240) * 60_000L
         while (true) {
-            val changed = withContext(Dispatchers.IO) {
-                com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
+            val due = System.currentTimeMillis() -
+                com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context) >= every
+            if (due) {
+                val changed = withContext(Dispatchers.IO) {
+                    com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
+                }
+                if (changed) wallpaperVersion++
             }
-            if (changed) wallpaperVersion++
-            delay(every)
+            // Re-check often enough that a 1-minute interval is honoured, without waking the
+            // CPU needlessly on longer ones.
+            delay((every / 4).coerceIn(5_000L, 30_000L))
         }
     }
 

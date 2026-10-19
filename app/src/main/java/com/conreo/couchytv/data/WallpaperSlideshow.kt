@@ -23,6 +23,7 @@ object WallpaperSlideshow {
 
     private const val TARGET = "wallpaper.jpg"
     private const val LAST = "slideshow-last.txt"
+    private const val STAMP = "slideshow-changed.at"
 
     /**
      * Replaces the current wallpaper with a random image from the folder.
@@ -39,6 +40,7 @@ object WallpaperSlideshow {
         val pool = images.filter { it.name != last }.ifEmpty { images }
         val pick = pool.random()
 
+        val stamp = File(context.filesDir, STAMP)
         val copied = runCatching {
             val input = context.contentResolver.openInputStream(pick.uri)
                 ?: error("cannot read ${pick.name}")
@@ -46,17 +48,31 @@ object WallpaperSlideshow {
                 File(context.filesDir, TARGET).outputStream().use { o -> i.copyTo(o) }
             }
         }.isSuccess
-        if (copied) runCatching { lastFile.writeText(pick.name) }
+        if (copied) {
+            runCatching { lastFile.writeText(pick.name) }
+            runCatching { stamp.writeText(System.currentTimeMillis().toString()) }
+        }
         return copied
     }
 
+    /** When the wallpaper last changed, epoch millis; 0 when it never has. */
+    fun lastChangeMs(context: Context): Long =
+        runCatching {
+            File(context.filesDir, STAMP).readText().trim().toLong()
+        }.getOrDefault(0L)
+
     private data class Image(val name: String, val uri: android.net.Uri)
 
-    private fun listImages(context: Context): List<Image> =
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> queryMediaStore(context)
-            else -> listFromFolder()
+    private fun listImages(context: Context): List<Image> {
+        val indexed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            queryMediaStore(context)
+        } else {
+            emptyList()
         }
+        // Files copied in by ADB, a USB stick or a file manager are not in the index until
+        // the media scanner runs, so an empty result is not the same as an empty folder.
+        return indexed.ifEmpty { listFromFolder() }
+    }
 
     /** API 29+: the folder is addressable through RELATIVE_PATH, no file paths involved. */
     private fun queryMediaStore(context: Context): List<Image> {
