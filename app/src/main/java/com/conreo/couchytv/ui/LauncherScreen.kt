@@ -81,6 +81,7 @@ import com.conreo.couchytv.data.AppRepository
 import com.conreo.couchytv.data.ConfigStore
 import com.conreo.couchytv.data.LAYOUT_DOCK
 import com.conreo.couchytv.data.LAYOUT_GRID
+import com.conreo.couchytv.data.LAYOUT_SINGLE_ROW
 import com.conreo.couchytv.data.LauncherConfig
 import com.conreo.couchytv.data.NetStatus
 import com.conreo.couchytv.data.networkStatusFlow
@@ -496,12 +497,18 @@ fun LauncherApp(rescanTick: Int) {
         }
     }
 
-    fun moveHorizontal(delta: Int) =
-        if (config.layout == LAYOUT_DOCK) moveDock(delta) else moveWithinRow(delta)
+    fun moveHorizontal(delta: Int) = when (config.layout) {
+        LAYOUT_DOCK -> moveDock(delta)
+        // One row: Left/Right swap with the neighbour, exactly like the dock.
+        LAYOUT_SINGLE_ROW -> moveDock(delta)
+        else -> moveWithinRow(delta)
+    }
 
     fun moveVertical(delta: Int) = when (config.layout) {
         LAYOUT_GRID -> moveGridVertical(delta, gridCols)
         LAYOUT_DOCK -> moveDock(if (delta < 0) -dockCols else dockCols)
+        // A single row has no row above or below to move to.
+        LAYOUT_SINGLE_ROW -> Unit
         else -> moveAcrossRows(delta)
     }
 
@@ -701,8 +708,12 @@ fun LauncherApp(rescanTick: Int) {
                 4 -> {} // off
                 3 -> Box(Modifier.fillMaxSize().background(ScrimFull))
                 2 -> Box(Modifier.fillMaxSize().background(ScrimBottom))
-                1 -> Box(Modifier.fillMaxSize().background(ScrimTop))
-                else -> Box(Modifier.fillMaxSize().background(ScrimTopBottom))
+                1 -> Box(Modifier.fillMaxSize().background(
+                    // The single row leaves the top of the screen free — don't
+                    // darken it; the status bar has its own glass pill.
+                    if (config.layout == LAYOUT_SINGLE_ROW) ScrimBottom else ScrimTop))
+                else -> Box(Modifier.fillMaxSize().background(
+                    if (config.layout == LAYOUT_SINGLE_ROW) ScrimBottom else ScrimTopBottom))
             }
 
             // Launch entrance: after the boot logo, wait a beat, then the glass
@@ -767,6 +778,19 @@ fun LauncherApp(rescanTick: Int) {
                         intro = introShown,
                         expanded = dockExpanded,
                         onExpandChange = { dockExpanded = it },
+                        onLaunch = { app -> if (movePkg == null) Actions.launchApp(context, app.pkg) },
+                        onMenu = { app -> if (movePkg == null) menuFor = app },
+                    )
+                    LAYOUT_SINGLE_ROW -> SingleRowArea(
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        apps = dockApps,
+                        config = config,
+                        accent = accent,
+                        movePkg = movePkg,
+                        moveFocus = moveFocus,
+                        maxIcon = cardWidth,
+                        prefGap = gap,
+                        intro = introShown,
                         onLaunch = { app -> if (movePkg == null) Actions.launchApp(context, app.pkg) },
                         onMenu = { app -> if (movePkg == null) menuFor = app },
                     )
@@ -1074,6 +1098,115 @@ private fun GridSection(
                                     scaleX = s
                                     scaleY = s
                                 },
+                            onLaunch = { onLaunch(app) },
+                            onLongPress = { onMenu(app) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ----- single row: every app in one line at the bottom, Apple-TV style ----- */
+
+/**
+ * Every app in ONE row, pinned to the bottom of the screen.
+ *
+ * No expand gesture, no second row, no scrolling: the icons shrink to fit the
+ * width instead. Nothing ever covers the wallpaper — the picture stays sharp —
+ * and the upper screen is left free for whatever the owner wants to put there.
+ *
+ * The glass hugs the icons rather than spanning the whole width: a full-width
+ * bar around a short row of small icons reads as an empty shelf.
+ */
+@Composable
+private fun SingleRowArea(
+    modifier: Modifier,
+    apps: List<AppEntry>,
+    config: LauncherConfig,
+    accent: Color,
+    movePkg: String?,
+    moveFocus: FocusRequester,
+    maxIcon: Dp,
+    prefGap: Dp,
+    intro: Boolean,
+    onLaunch: (AppEntry) -> Unit,
+    onMenu: (AppEntry) -> Unit,
+) {
+    val rowFocus = remember { FocusRequester() }
+    // Claim focus over the first few frames (not after a delay): otherwise the
+    // focus, briefly orphaned when the old row's node leaves, snaps to the first
+    // focusable — the status-bar icon — and flashes selected before we grab it.
+    LaunchedEffect(intro) {
+        if (!intro) return@LaunchedEffect
+        repeat(4) {
+            withFrameNanos {}
+            runCatching { rowFocus.requestFocus() }
+        }
+    }
+    BoxWithConstraints(modifier) {
+        val innerPadding = 12.dp
+        val margin = 24.dp
+        val available = maxWidth - margin * 2 - innerPadding * 2
+        val fit = fitSingleRow(available, apps.size, maxIcon, prefGap)
+        val shown = apps.take(fit.visibleCount)
+        // Say it out loud when the row gets cramped — a warning nobody reads
+        // is worth more in the log than a silently squashed icon.
+        if (fit.icon.value < 20f || shown.size < apps.size) {
+            android.util.Log.w(
+                "CouchySingleRow",
+                "${apps.size} apps in ${available.value}dp: icons ${fit.icon.value}dp, " +
+                    "showing ${shown.size}",
+            )
+        }
+        // Entrance: the row rises from the bottom and fades in, like the dock.
+        val introRow by animateFloatAsState(
+            targetValue = if (intro) 1f else 0f,
+            animationSpec = tween(420, easing = FastOutSlowInEasing),
+            label = "singleRowIntro",
+        )
+        Column(Modifier.fillMaxSize()) {
+            Spacer(Modifier.weight(1f))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        translationY = (1f - introRow) * size.height
+                        alpha = introRow
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    Modifier
+                        .padding(horizontal = margin, vertical = 8.dp)
+                        .clip(SmoothCornerShape(LocalCornerRadius.current + 14.dp))
+                        .background(Color(0xB3121418))
+                        .background(Color.White.copy(alpha = 0.06f))
+                        .padding(innerPadding)
+                        // Down does nothing here: there is no grid to open.
+                        .onPreviewKeyEvent { e ->
+                            e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown
+                        },
+                    horizontalArrangement = Arrangement.spacedBy(fit.gap),
+                ) {
+                    shown.forEachIndexed { i, app ->
+                        val moving = app.pkg == movePkg
+                        AppCard(
+                            app = app,
+                            isMoving = moving,
+                            isHidden = app.pkg in config.hidden,
+                            accent = accent,
+                            cardWidth = fit.icon,
+                            square = true,
+                            // No labels: at dock size a name under every icon
+                            // would eat the whole row.
+                            showLabel = false,
+                            modifier = when {
+                                moving -> Modifier.focusRequester(moveFocus)
+                                i == 0 -> Modifier.focusRequester(rowFocus)
+                                else -> Modifier
+                            },
                             onLaunch = { onLaunch(app) },
                             onLongPress = { onMenu(app) },
                         )

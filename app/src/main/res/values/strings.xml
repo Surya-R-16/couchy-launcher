@@ -82,6 +82,8 @@
     <string name="mode_carousel">Carousel</string>
     <string name="mode_grid">Grid</string>
     <string name="mode_dock">Dock</string>
+    <string name="mode_single_row">Single row</string>
+    <string name="mode_single_row_desc">Every app in one row at the bottom — icons shrink to fit, the wallpaper stays sharp</string>
     <string name="mode_carousel_desc">Selection stays fixed — the icons scroll under it</string>
     <string name="mode_grid_desc">All icons contained on screen — the selection moves</string>
     <string name="mode_dock_desc">Floating dock at the bottom — Down expands over a blurred wallpaper</string>

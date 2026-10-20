@@ -76,6 +76,7 @@ import com.conreo.couchytv.data.ConfigStore
 import com.conreo.couchytv.data.DATE_FORMATS
 import com.conreo.couchytv.data.LAYOUT_DOCK
 import com.conreo.couchytv.data.LAYOUT_GRID
+import com.conreo.couchytv.data.LAYOUT_SINGLE_ROW
 import com.conreo.couchytv.data.LauncherConfig
 import kotlinx.coroutines.Dispatchers
 import androidx.compose.runtime.withFrameNanos
@@ -588,18 +589,25 @@ private fun DisplayScreen(
         SelectorRow(
             modifier = Modifier.focusRequester(f),
             label = stringResource(R.string.view_mode),
-            value = listOf(stringResource(R.string.mode_carousel), stringResource(R.string.mode_grid), stringResource(R.string.mode_dock))[config.layout.coerceIn(0, 2)],
+            value = listOf(
+                stringResource(R.string.mode_carousel),
+                stringResource(R.string.mode_grid),
+                stringResource(R.string.mode_dock),
+                stringResource(R.string.mode_single_row),
+            )[config.layout.coerceIn(0, 3)],
             description = when (config.layout) {
                 LAYOUT_GRID -> stringResource(R.string.mode_grid_desc)
                 LAYOUT_DOCK -> stringResource(R.string.mode_dock_desc)
+                LAYOUT_SINGLE_ROW -> stringResource(R.string.mode_single_row_desc)
                 else -> stringResource(R.string.mode_carousel_desc)
             },
-            steps = 3,
-            current = config.layout.coerceIn(0, 2),
+            steps = 4,
+            current = config.layout.coerceIn(0, 3),
             onSelect = { v -> update { it.copy(layout = v) } },
         )
-        // Section names are only drawn in carousel/grid — hide the toggle in dock.
-        if (config.layout != LAYOUT_DOCK) {
+        // Section names are only drawn in carousel/grid — hide the toggle in dock
+        // and in the single row (one flat group, no sections).
+        if (config.layout != LAYOUT_DOCK && config.layout != LAYOUT_SINGLE_ROW) {
             SectionLabel(stringResource(R.string.section_elements))
             SettingsItem(
                 selected = false,

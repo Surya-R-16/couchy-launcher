@@ -84,6 +84,8 @@ data class LauncherConfig(
 const val LAYOUT_CAROUSEL = 0
 const val LAYOUT_GRID = 1
 const val LAYOUT_DOCK = 2
+/** Every app in ONE row at the bottom — Apple-TV style, no expand, no scroll. */
+const val LAYOUT_SINGLE_ROW = 3
 
 /** Status bar date formats (SimpleDateFormat patterns); index 0 = off. */
 val DATE_FORMATS = listOf("", "EEE d", "EEE d MMM", "d MMM yyyy", "dd/MM", "MM/dd", "yyyy-MM-dd")

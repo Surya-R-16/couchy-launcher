@@ -65,6 +65,10 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -91,4 +95,9 @@ dependencies {
     // OkHttp data source: lets us stream aerials through a trust-all TLS client
     // so Apple's sylvan.apple.com (cert chain many TV trust stores reject) works.
     implementation("androidx.media3:media3-datasource-okhttp:1.4.1")
+
+    // The single-row layout's sizing maths is pure logic — it gets a real
+    // unit test so the "every app still fits" invariant is checked on every
+    // build, not by staring at the TV.
+    testImplementation("junit:junit:4.13.2")
 }

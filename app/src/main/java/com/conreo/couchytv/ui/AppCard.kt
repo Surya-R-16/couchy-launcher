@@ -46,6 +46,10 @@ fun AppCard(
     accent: Color,
     cardWidth: androidx.compose.ui.unit.Dp = 190.dp,
     showLabel: Boolean = true,
+    // Square tile (the single-row dock): the app's own launcher icon, centred.
+    // A 16:9 banner at dock size would be a sliver, so square is the only
+    // readable option there.
+    square: Boolean = false,
     modifier: Modifier = Modifier,
     onLaunch: () -> Unit,
     onLongPress: () -> Unit,
@@ -119,9 +123,29 @@ fun AppCard(
         Box(
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(16f / 9f)
+                .aspectRatio(if (square) 1f else 16f / 9f)
         ) {
-            if (app.banner != null) {
+            if (square) {
+                val icon = app.icon
+                when {
+                    icon != null -> Image(
+                        bitmap = icon,
+                        contentDescription = app.label,
+                        contentScale = ContentScale.Fit,
+                        // A little air around the glyph, like a home screen.
+                        modifier = Modifier.fillMaxSize().padding(cardWidth * 0.09f),
+                    )
+                    // No launcher icon (rare): crop the banner to the square
+                    // instead of letterboxing it into an unreadable band.
+                    app.banner != null -> Image(
+                        bitmap = app.banner,
+                        contentDescription = app.label,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    else -> Box(Modifier.fillMaxSize().background(app.tile))
+                }
+            } else if (app.banner != null) {
                 Image(
                     bitmap = app.banner,
                     contentDescription = app.label,

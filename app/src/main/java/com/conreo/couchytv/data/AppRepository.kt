@@ -41,6 +41,10 @@ data class AppEntry(
 
 object AppRepository {
 
+    /** Launcher icons are rasterized at this size — the single-row dock draws
+     *  square tiles that can reach ~150dp, wider than the old 128px. */
+    const val ICON_PX = 256
+
     /** Reserved id for the auto-filled "All apps" section (every launchable app). */
     const val ALL_APPS_ID = "__all__"
 
@@ -122,9 +126,17 @@ object AppRepository {
                 // Size is baked into the name: a density change (or the earlier
                 // fixed-size caches) regenerates instead of loading a stale size.
                 val bannerName = "$pkg-$stamp-b$bannerW.webp"
-                val iconName = "$pkg-$stamp-i128.webp"
+                val iconName = "$pkg-$stamp-i$ICON_PX.webp"
 
-                previous?.get(pkg)?.takeIf { it.stamp == stamp }?.let { cached ->
+                // A banner app used to skip the icon entirely (icon = null).
+                // The single-row layout shows square launcher icons, so every app
+                // needs one. Entries cached before that change are stale, and so
+                // are the old 128px ones — the width check invalidates both.
+                previous?.get(pkg)?.takeIf {
+                    it.stamp == stamp &&
+                        !(it.banner != null && it.icon == null) &&
+                        (it.icon == null || it.icon.width == ICON_PX)
+                }?.let { cached ->
                     if (cached.banner != null) validCacheNames.add(bannerName)
                     if (cached.icon != null) validCacheNames.add(iconName)
                     return@async cached
@@ -142,12 +154,12 @@ object AppRepository {
                             bannerDrawable.toBitmap(bannerW, bannerH, Bitmap.Config.ARGB_8888)
                         }.getOrNull()
                     }
-                val icon = if (banner == null) {
-                    // 128px: sharp on the fallback tile even on 4K panels.
-                    cachedBitmap(cacheDir, iconName, Bitmap.Config.ARGB_8888) {
-                        runCatching { ri.loadIcon(pm)?.toBitmap(128, 128) }.getOrNull()
-                    }
-                } else null
+                // 256px: the single-row dock draws square icons that can reach
+                // ~150dp, which at TV density is wider than 128px. Sharp on the
+                // fallback tile even on 4K panels.
+                val icon = cachedBitmap(cacheDir, iconName, Bitmap.Config.ARGB_8888) {
+                    runCatching { ri.loadIcon(pm)?.toBitmap(ICON_PX, ICON_PX) }.getOrNull()
+                }
                 if (banner != null) validCacheNames.add(bannerName)
                 if (icon != null) validCacheNames.add(iconName)
                 // Upload textures ahead of first draw so the GPU never stalls
