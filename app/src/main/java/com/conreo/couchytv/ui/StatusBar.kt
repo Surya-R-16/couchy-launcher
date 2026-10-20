@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -37,13 +39,19 @@ fun StatusBar(
 ) {
     // Optional glass panel behind the icon cluster — same look as the dock
     // panel, corners follow the roundness setting.
-    val cluster = if (glass) {
-        Modifier
-            .clip(SmoothCornerShape(LocalCornerRadius.current))
-            .background(Color(0xB3121418))
-            .background(Color.White.copy(alpha = 0.06f))
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-    } else Modifier
+    // A plain rounded rectangle, not the squircle: the pill is a wide
+    // container, and a generic path-mask clip re-rasterises the path every
+    // frame where the round-rect clip is a cheap corner mask.
+    val corner = LocalCornerRadius.current
+    val cluster = remember(glass, corner) {
+        if (glass) {
+            Modifier
+                .clip(RoundedCornerShape(corner))
+                .background(Color(0xB3121418))
+                .background(Color.White.copy(alpha = 0.06f))
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+        } else Modifier
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -107,16 +115,25 @@ private fun StatusIcon(
     contentDescription: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(CircleShape),
-        colors = ClickableSurfaceDefaults.colors(
+    // The Surface's style objects are allocated per composition otherwise.
+    // Same values, same look — they are simply built once and reused.
+    val surfaceShape = rememberComputed(MaterialTheme.shapes) {
+        ClickableSurfaceDefaults.shape(CircleShape)
+    }
+    val surfaceColors = rememberComputed(MaterialTheme.colorScheme) {
+        ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = Color.White.copy(alpha = 0.22f),
             contentColor = Color.White,
             focusedContentColor = Color.White,
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.18f),
+        )
+    }
+    val surfaceScale = remember { ClickableSurfaceDefaults.scale(focusedScale = 1.18f) }
+    Surface(
+        onClick = onClick,
+        shape = surfaceShape,
+        colors = surfaceColors,
+        scale = surfaceScale,
     ) {
         Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             Icon(

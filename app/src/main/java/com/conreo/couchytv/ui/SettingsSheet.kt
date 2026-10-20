@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -213,14 +214,23 @@ fun SettingsSheet(
     ) {
         // Force the dialog window to fill the screen — Compose dialogs otherwise
         // keep a small platform margin, so the panel wouldn't sit flush against
-        // the right edge.
+        // the right edge. ONCE, when the dialog opens: as a SideEffect this ran
+        // on every recomposition of the dialog, relaying out the whole window
+        // each time. A frame or two of waiting covers the case where the
+        // dialog's window is not attached yet.
         val dialogView = androidx.compose.ui.platform.LocalView.current
-        androidx.compose.runtime.SideEffect {
-            ((dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window)
-                ?.setLayout(
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                    android.view.WindowManager.LayoutParams.MATCH_PARENT,
-                )
+        LaunchedEffect(Unit) {
+            repeat(3) {
+                val window = (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+                if (window != null) {
+                    window.setLayout(
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                        android.view.WindowManager.LayoutParams.MATCH_PARENT,
+                    )
+                    return@LaunchedEffect
+                }
+                withFrameNanos {}
+            }
         }
         // A Dialog spawns its own window that re-provides the platform density,
         // so the launcher's ScaledUi doesn't reach here — re-apply it. The
@@ -236,15 +246,18 @@ fun SettingsSheet(
             ) {
                 // Slide left when entering a sub-screen, right when going back
                 // to Main (the root); cross-fade so it never looks abrupt.
+                // 150ms, not 260ms: the old screen stays composed for the whole
+                // transition, so a shorter one means fewer frames of two
+                // screens being drawn at once.
                 androidx.compose.animation.AnimatedContent(
                     targetState = screen,
                     transitionSpec = {
                         val forward = targetState != SettingsScreen.Main
                         val dir = if (forward) 1 else -1
-                        (androidx.compose.animation.slideInHorizontally(tween(260)) { w -> dir * w } +
-                            androidx.compose.animation.fadeIn(tween(260))) togetherWith
-                            (androidx.compose.animation.slideOutHorizontally(tween(260)) { w -> -dir * w } +
-                                androidx.compose.animation.fadeOut(tween(260)))
+                        (androidx.compose.animation.slideInHorizontally(tween(150)) { w -> dir * w } +
+                            androidx.compose.animation.fadeIn(tween(150))) togetherWith
+                            (androidx.compose.animation.slideOutHorizontally(tween(150)) { w -> -dir * w } +
+                                androidx.compose.animation.fadeOut(tween(150)))
                     },
                     label = "settingsScreen",
                 ) { target ->
@@ -790,6 +803,13 @@ private fun AppsScreen(
     onToggleHide: (String) -> Unit,
 ) {
     val catNames = remember(config.categories) { config.categories.associate { it.id to it.name } }
+    // The section of every app, computed ONCE per config: the old code called
+    // sectionsOf() per row, and each call rebuilt the set of valid ids.
+    val sectionsByPkg = remember(config, apps) {
+        val validIds = AppRepository.validSectionIds(config)
+        val fallbackId = AppRepository.fallbackSectionId(config)
+        apps.associate { it.pkg to AppRepository.sectionsOf(it, config, validIds, fallbackId) }
+    }
 
     Column(Modifier.fillMaxSize().padding(20.dp)) {
         Text(
@@ -822,7 +842,7 @@ private fun AppsScreen(
                             modifier = if (i == 0) Modifier.focusRequester(f) else Modifier,
                             headlineContent = { Text(app.label) },
                             supportingContent = {
-                                val names = AppRepository.sectionsOf(app, config)
+                                val names = sectionsByPkg[app.pkg].orEmpty()
                                     .mapNotNull { catNames[it] }
                                 val suffix = if (app.pkg in config.hidden) " · " + stringResource(R.string.hidden_tag) else ""
                                 Text(names.joinToString(" · ").ifEmpty { stringResource(R.string.no_section) } + suffix)
@@ -896,6 +916,15 @@ private fun SectionAppsDialog(
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
                 val f = initialFocus()
+                // The section of every app, computed ONCE per config instead of
+                // once per tile.
+                val validIds = remember(config) { AppRepository.validSectionIds(config) }
+                val fallbackId = remember(config) { AppRepository.fallbackSectionId(config) }
+                val inSection = remember(config, apps, cat.id) {
+                    apps.filter {
+                        cat.id in AppRepository.sectionsOf(it, config, validIds, fallbackId)
+                    }.map { it.pkg }.toSet()
+                }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     modifier = Modifier.weight(1f),
@@ -907,7 +936,7 @@ private fun SectionAppsDialog(
                     val autoFilled = cat.id == AppRepository.ALL_APPS_ID
                     items(apps.size, key = { apps[it].pkg }) { i ->
                         val app = apps[i]
-                        val inSection = autoFilled || cat.id in AppRepository.sectionsOf(app, config)
+                        val isIn = autoFilled || app.pkg in inSection
                         Surface(
                             onClick = { if (!autoFilled) onToggle(app) },
                             modifier = if (i == 0) Modifier.focusRequester(f) else Modifier,
@@ -952,7 +981,7 @@ private fun SectionAppsDialog(
                                     )
                                 }
                                 Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-                                    CheckMark(checked = inSection)
+                                    CheckMark(checked = isIn)
                                 }
                             }
                         }
@@ -1079,17 +1108,25 @@ private fun LanguageScreen(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+    val f = initialFocus()
+    // Lazy, not a scrolling Column: the eager column composed every row (and
+    // every locale lookup) at once, even though only a handful of rows are
+    // ever on screen.
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            stringResource(R.string.item_language),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
-        val f = initialFocus()
-        com.conreo.couchytv.data.LANGUAGES.forEachIndexed { i, code ->
+        item(key = "header") {
+            Text(
+                stringResource(R.string.item_language),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
+            )
+        }
+        val languages = com.conreo.couchytv.data.LANGUAGES
+        items(languages.size, key = { languages[it] }) { i ->
+            val code = languages[i]
             // Endonym: each language named in its own tongue (no per-language strings)
             val label = if (code.isEmpty()) stringResource(R.string.lang_system)
             else java.util.Locale(code).let { it.getDisplayName(it) }
@@ -1245,42 +1282,56 @@ private fun CategoriesScreen(
     var renameFor by remember { mutableStateOf<CategoryCfg?>(null) }
     var appsFor by remember { mutableStateOf<CategoryCfg?>(null) }
 
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+    val f = initialFocus()
+    // The editable sections, with their index in the FULL category list (the
+    // up/down buttons move them there).
+    val cats = config.categories
+    val editable = remember(cats) {
+        cats.mapIndexed { i, c -> i to c }
+            .filter { it.second.id != AppRepository.ALL_APPS_ID }
+    }
+    // Lazy, not a scrolling Column: the eager column composed every section
+    // row (and all of its buttons) at once.
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            stringResource(R.string.item_sections),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
-        val f = initialFocus()
-        // Auto-filled "All apps" section: a single toggle, no per-app assignment.
-        run {
-            val hasAll = config.categories.any { it.id == AppRepository.ALL_APPS_ID }
-            val allName = stringResource(R.string.cat_all_apps)
-            SettingsItem(
-                selected = false,
-                onClick = {
-                    scope.launch {
-                        store.update { cfg ->
-                            val rest = cfg.categories.filter { it.id != AppRepository.ALL_APPS_ID }
-                            cfg.copy(
-                                categories = if (hasAll) rest
-                                else rest + CategoryCfg(AppRepository.ALL_APPS_ID, allName),
-                            )
-                        }
-                    }
-                },
-                modifier = Modifier.focusRequester(f),
-                headlineContent = { Text(allName) },
-                supportingContent = { Text(stringResource(R.string.all_apps_sub)) },
-                leadingContent = { Icon(AppIcons.Apps, contentDescription = null) },
-                trailingContent = { CheckMark(checked = hasAll) },
+        item(key = "header") {
+            Text(
+                stringResource(R.string.item_sections),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
             )
         }
-        config.categories.forEachIndexed { i, cat ->
-            if (cat.id == AppRepository.ALL_APPS_ID) return@forEachIndexed
+        // Auto-filled "All apps" section: a single toggle, no per-app assignment.
+        item(key = "all-apps") {
+            run {
+                val hasAll = config.categories.any { it.id == AppRepository.ALL_APPS_ID }
+                val allName = stringResource(R.string.cat_all_apps)
+                SettingsItem(
+                    selected = false,
+                    onClick = {
+                        scope.launch {
+                            store.update { cfg ->
+                                val rest = cfg.categories.filter { it.id != AppRepository.ALL_APPS_ID }
+                                cfg.copy(
+                                    categories = if (hasAll) rest
+                                    else rest + CategoryCfg(AppRepository.ALL_APPS_ID, allName),
+                                )
+                            }
+                        }
+                    },
+                    modifier = Modifier.focusRequester(f),
+                    headlineContent = { Text(allName) },
+                    supportingContent = { Text(stringResource(R.string.all_apps_sub)) },
+                    leadingContent = { Icon(AppIcons.Apps, contentDescription = null) },
+                    trailingContent = { CheckMark(checked = hasAll) },
+                )
+            }
+        }
+        items(editable.size, key = { editable[it].second.id }) { idx ->
+            val (i, cat) = editable[idx]
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1325,22 +1376,24 @@ private fun CategoriesScreen(
                 }
             }
         }
-        val newSectionName = stringResource(R.string.new_section)
-        SettingsItem(
-            selected = false,
-            onClick = {
-                scope.launch {
-                    store.update {
-                        it.copy(
-                            categories = it.categories +
-                                CategoryCfg("c${System.currentTimeMillis()}", newSectionName)
-                        )
+        item(key = "add-section") {
+            val newSectionName = stringResource(R.string.new_section)
+            SettingsItem(
+                selected = false,
+                onClick = {
+                    scope.launch {
+                        store.update {
+                            it.copy(
+                                categories = it.categories +
+                                    CategoryCfg("c${System.currentTimeMillis()}", newSectionName)
+                            )
+                        }
                     }
-                }
-            },
-            headlineContent = { Text(stringResource(R.string.add_section)) },
-            leadingContent = { Icon(AppIcons.Add, contentDescription = null) },
-        )
+                },
+                headlineContent = { Text(stringResource(R.string.add_section)) },
+                leadingContent = { Icon(AppIcons.Add, contentDescription = null) },
+            )
+        }
     }
 
     appsFor?.let { cat ->
@@ -1445,150 +1498,176 @@ private fun WallpaperScreen(
     onToggleSlideshow: () -> Unit,
     onSetSlideshowMinutes: (Int) -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+    val f = initialFocus()
+    val staticActive = !config.useBuiltinAerials &&
+        !config.useVideoWallpaper && !config.useCustomWallpaper
+    // Lazy, not a scrolling Column: the eager column composed every row (and
+    // every preset list) at once, even though only a few rows are on screen.
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            stringResource(R.string.item_wallpaper),
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
-        )
-        val f = initialFocus()
-        val staticActive = !config.useBuiltinAerials &&
-            !config.useVideoWallpaper && !config.useCustomWallpaper
+        item(key = "header") {
+            Text(
+                stringResource(R.string.item_wallpaper),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 12.dp, start = 8.dp),
+            )
+        }
 
         // Dimming — how much the wallpaper is darkened for icon readability.
         // Applies to any background; "Top & bottom" keeps the centre clear.
-        run {
-            val names = listOf(
-                stringResource(R.string.dim_top_bottom),
-                stringResource(R.string.dim_top),
-                stringResource(R.string.dim_bottom),
-                stringResource(R.string.dim_full),
-                stringResource(R.string.dim_off),
-            )
-            val idx = config.scrimMode.coerceIn(0, names.size - 1)
-            SelectorRow(
-                modifier = Modifier.focusRequester(f),
-                label = stringResource(R.string.dim_label),
-                value = names[idx],
-                steps = names.size,
-                current = idx,
-                onSelect = { v -> onSetScrim(v) },
-            )
+        item(key = "dim") {
+            run {
+                val names = listOf(
+                    stringResource(R.string.dim_top_bottom),
+                    stringResource(R.string.dim_top),
+                    stringResource(R.string.dim_bottom),
+                    stringResource(R.string.dim_full),
+                    stringResource(R.string.dim_off),
+                )
+                val idx = config.scrimMode.coerceIn(0, names.size - 1)
+                SelectorRow(
+                    modifier = Modifier.focusRequester(f),
+                    label = stringResource(R.string.dim_label),
+                    value = names[idx],
+                    steps = names.size,
+                    current = idx,
+                    onSelect = { v -> onSetScrim(v) },
+                )
+            }
         }
 
         /* ---------------- STATIC: color gradient + your own photo ---------------- */
-        SectionLabel(stringResource(R.string.wp_section_static))
+        item(key = "label-static") { SectionLabel(stringResource(R.string.wp_section_static)) }
 
         // Color gradient mode — checkmark like every other mode; the picker
         // below appears once it's active (mirrors the aerial collection row).
-        val presetIdx = config.wallpaper.coerceIn(0, WALLPAPERS.size - 1)
-        SettingsItem(
-            selected = false, onClick = { onPreset(presetIdx) },
-            headlineContent = { Text(stringResource(R.string.color_gradient)) },
-            leadingContent = { Icon(AppIcons.Palette, contentDescription = null) },
-            trailingContent = { CheckMark(checked = staticActive) },
-        )
+        item(key = "preset") {
+            val presetIdx = config.wallpaper.coerceIn(0, WALLPAPERS.size - 1)
+            SettingsItem(
+                selected = false, onClick = { onPreset(presetIdx) },
+                headlineContent = { Text(stringResource(R.string.color_gradient)) },
+                leadingContent = { Icon(AppIcons.Palette, contentDescription = null) },
+                trailingContent = { CheckMark(checked = staticActive) },
+            )
+        }
         if (staticActive) {
-            val presetNames = listOf(
-                stringResource(R.string.wp_midnight),
-                stringResource(R.string.wp_aurora),
-                stringResource(R.string.wp_sunset),
-                stringResource(R.string.wp_deep),
-                stringResource(R.string.wp_charcoal),
-            )
-            SelectorRow(
-                label = stringResource(R.string.preset_label),
-                value = presetNames[presetIdx],
-                steps = WALLPAPERS.size,
-                current = presetIdx,
-                onSelect = { v -> onPreset(v) },
-            )
+            item(key = "preset-selector") {
+                val presetNames = listOf(
+                    stringResource(R.string.wp_midnight),
+                    stringResource(R.string.wp_aurora),
+                    stringResource(R.string.wp_sunset),
+                    stringResource(R.string.wp_deep),
+                    stringResource(R.string.wp_charcoal),
+                )
+                val presetIdx = config.wallpaper.coerceIn(0, WALLPAPERS.size - 1)
+                SelectorRow(
+                    label = stringResource(R.string.preset_label),
+                    value = presetNames[presetIdx],
+                    steps = WALLPAPERS.size,
+                    current = presetIdx,
+                    onSelect = { v -> onPreset(v) },
+                )
+            }
         }
 
         // A photo of your own
-        SettingsItem(
-            selected = false, onClick = onPickPhoto,
-            headlineContent = { Text(stringResource(R.string.pick_photo)) },
-            supportingContent = { Text(stringResource(R.string.pick_photo_sub)) },
-            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useCustomWallpaper && !config.slideshow) },
-        )
+        item(key = "photo") {
+            SettingsItem(
+                selected = false, onClick = onPickPhoto,
+                headlineContent = { Text(stringResource(R.string.pick_photo)) },
+                supportingContent = { Text(stringResource(R.string.pick_photo_sub)) },
+                leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
+                trailingContent = { CheckMark(checked = config.useCustomWallpaper && !config.slideshow) },
+            )
+        }
 
         // Slideshow — rotate through every image in Pictures/Slideshow.
-        SettingsItem(
-            selected = false, onClick = onToggleSlideshow,
-            headlineContent = { Text(stringResource(R.string.slideshow)) },
-            supportingContent = { Text(stringResource(R.string.slideshow_sub)) },
-            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useCustomWallpaper && config.slideshow) },
-        )
-        if (config.useCustomWallpaper && config.slideshow) {
-            val minuteChoices = listOf(1, 5, 10, 15, 30, 60)
-            val mi = minuteChoices.indexOf(config.slideshowMinutes)
-                .let { if (it >= 0) it else 2 }
-            SelectorRow(
-                label = stringResource(R.string.slideshow_every),
-                value = "${
-                    minuteChoices[mi]
-                } min",
-                steps = minuteChoices.size,
-                current = mi,
-                onSelect = { v -> onSetSlideshowMinutes(minuteChoices[v]) },
+        item(key = "slideshow") {
+            SettingsItem(
+                selected = false, onClick = onToggleSlideshow,
+                headlineContent = { Text(stringResource(R.string.slideshow)) },
+                supportingContent = { Text(stringResource(R.string.slideshow_sub)) },
+                leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
+                trailingContent = { CheckMark(checked = config.useCustomWallpaper && config.slideshow) },
             )
+        }
+        if (config.useCustomWallpaper && config.slideshow) {
+            item(key = "slideshow-minutes") {
+                val minuteChoices = listOf(1, 5, 10, 15, 30, 60)
+                val mi = minuteChoices.indexOf(config.slideshowMinutes)
+                    .let { if (it >= 0) it else 2 }
+                SelectorRow(
+                    label = stringResource(R.string.slideshow_every),
+                    value = "${
+                        minuteChoices[mi]
+                    } min",
+                    steps = minuteChoices.size,
+                    current = mi,
+                    onSelect = { v -> onSetSlideshowMinutes(minuteChoices[v]) },
+                )
+            }
         }
 
         /* ---------------- VIDEO: built-in aerials + your own video ---------------- */
-        SectionLabel(stringResource(R.string.wp_section_video))
+        item(key = "label-video") { SectionLabel(stringResource(R.string.wp_section_video)) }
 
         // Built-in aerial videos
-        SettingsItem(
-            selected = false, onClick = onSelectBuiltinAerials,
-            headlineContent = { Text(stringResource(R.string.builtin_aerials)) },
-            supportingContent = { Text(stringResource(R.string.builtin_aerials_sub)) },
-            leadingContent = { Icon(AppIcons.Play, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useBuiltinAerials) },
-        )
+        item(key = "aerials") {
+            SettingsItem(
+                selected = false, onClick = onSelectBuiltinAerials,
+                headlineContent = { Text(stringResource(R.string.builtin_aerials)) },
+                supportingContent = { Text(stringResource(R.string.builtin_aerials_sub)) },
+                leadingContent = { Icon(AppIcons.Play, contentDescription = null) },
+                trailingContent = { CheckMark(checked = config.useBuiltinAerials) },
+            )
+        }
         if (config.useBuiltinAerials) {
-            val sourceNames = listOf(
-                stringResource(R.string.aerial_src_all),
-                stringResource(R.string.aerial_src_apple),
-                stringResource(R.string.aerial_src_amazon),
-                stringResource(R.string.aerial_src_comm1),
-                stringResource(R.string.aerial_src_comm2),
-            )
-            val idx = config.builtinSource.coerceIn(0, sourceNames.size - 1)
-            SelectorRow(
-                label = stringResource(R.string.aerial_src_label),
-                value = sourceNames[idx],
-                steps = sourceNames.size,
-                current = idx,
-                onSelect = { v -> onSelectBuiltinSource(v) },
-            )
+            item(key = "aerial-source") {
+                val sourceNames = listOf(
+                    stringResource(R.string.aerial_src_all),
+                    stringResource(R.string.aerial_src_apple),
+                    stringResource(R.string.aerial_src_amazon),
+                    stringResource(R.string.aerial_src_comm1),
+                    stringResource(R.string.aerial_src_comm2),
+                )
+                val idx = config.builtinSource.coerceIn(0, sourceNames.size - 1)
+                SelectorRow(
+                    label = stringResource(R.string.aerial_src_label),
+                    value = sourceNames[idx],
+                    steps = sourceNames.size,
+                    current = idx,
+                    onSelect = { v -> onSelectBuiltinSource(v) },
+                )
+            }
         }
 
         // A video file of your own
-        SettingsItem(
-            selected = false, onClick = onPickVideo,
-            headlineContent = { Text(stringResource(R.string.pick_video)) },
-            supportingContent = { Text(stringResource(R.string.pick_video_sub)) },
-            leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
-            trailingContent = { CheckMark(checked = config.useVideoWallpaper) },
-        )
+        item(key = "video") {
+            SettingsItem(
+                selected = false, onClick = onPickVideo,
+                headlineContent = { Text(stringResource(R.string.pick_video)) },
+                supportingContent = { Text(stringResource(R.string.pick_video_sub)) },
+                leadingContent = { Icon(AppIcons.Image, contentDescription = null) },
+                trailingContent = { CheckMark(checked = config.useVideoWallpaper) },
+            )
+        }
 
         // Playback speed — applies to aerials and your own video.
-        run {
-            val labels = listOf("0.25×", "0.5×", "0.75×", "1×")
-            val idx = config.videoSpeed.coerceIn(0, labels.size - 1)
-            SelectorRow(
-                label = stringResource(R.string.speed_label),
-                value = labels[idx],
-                steps = labels.size,
-                current = idx,
-                onSelect = { v -> onSetSpeed(v) },
-            )
+        item(key = "speed") {
+            run {
+                val labels = listOf("0.25×", "0.5×", "0.75×", "1×")
+                val idx = config.videoSpeed.coerceIn(0, labels.size - 1)
+                SelectorRow(
+                    label = stringResource(R.string.speed_label),
+                    value = labels[idx],
+                    steps = labels.size,
+                    current = idx,
+                    onSelect = { v -> onSetSpeed(v) },
+                )
+            }
         }
     }
 }
@@ -1607,7 +1686,10 @@ private fun initialFocus(): FocusRequester {
         // frame, stop on the first success) instead of after a fixed 300ms delay.
         // A late request would yank focus back to item 1 if the user had already
         // navigated down — the "quick navigation resets to the top" bug.
-        repeat(30) {
+        // A handful of attempts is enough: the node is attached by the first
+        // frame. The old 30 attempts forced 30 real frames on every settings
+        // screen, which is what made opening the sheet crawl.
+        repeat(5) {
             if (runCatching { fr.requestFocus() }.isSuccess) return@LaunchedEffect
             withFrameNanos {}
         }

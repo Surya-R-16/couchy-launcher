@@ -66,6 +66,12 @@ android {
         compose = true
     }
 
+    // Stability + metrics reports: which types Compose cannot skip.
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_reports")
+        metricsDestination = layout.buildDirectory.dir("compose_metrics")
+    }
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }

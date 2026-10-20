@@ -240,21 +240,45 @@ object AppRepository {
     }
 
     /**
+     * The section ids a config can hold: every category EXCEPT the auto-filled
+     * All-apps section, which is never a manual/fallback target.
+     *
+     * Hoisted out of [sectionsOf] so a list of rows can compute it once per
+     * config instead of rebuilding the set for every row.
+     */
+    fun validSectionIds(config: LauncherConfig): Set<String> =
+        config.categories.map { it.id }.filter { it != ALL_APPS_ID }.toSet()
+
+    /** The section an app with no valid auto-category falls back to. */
+    fun fallbackSectionId(config: LauncherConfig): String =
+        config.categories.lastOrNull { it.id != ALL_APPS_ID }?.id ?: "apps"
+
+    /**
      * The sections an app effectively belongs to. A stored EMPTY set is
      * respected (user removed the app from every section — it appears
      * nowhere); only apps with no stored entry fall back to auto-category.
      */
-    fun sectionsOf(app: AppEntry, config: LauncherConfig): Set<String> {
-        // The auto-filled All-apps section is never a manual/fallback target.
-        val validIds = config.categories.map { it.id }.filter { it != ALL_APPS_ID }.toSet()
-        val fallback = config.categories.lastOrNull { it.id != ALL_APPS_ID }?.id ?: "apps"
+    fun sectionsOf(app: AppEntry, config: LauncherConfig): Set<String> =
+        sectionsOf(app, config, validSectionIds(config), fallbackSectionId(config))
+
+    /**
+     * [sectionsOf] with the config-wide parts — the valid section ids and the
+     * fallback section — already computed by the caller. Same result, but a
+     * list of rows no longer rebuilds the id set for every row.
+     */
+    fun sectionsOf(
+        app: AppEntry,
+        config: LauncherConfig,
+        validIds: Set<String>,
+        fallbackId: String,
+    ): Set<String> {
         // A stored ALL_APPS_ID is not a section membership: that section shows every app
         // regardless. The section editor used to write it when a tile was tapped inside
         // "All apps", which left the app in no section at all ("selected but never appears").
         // Ignoring it here also repairs configs that were already saved that way.
         val user = config.sections[app.pkg]?.takeIf { ALL_APPS_ID !in it }
         if (user != null) return user.filter { it in validIds }.toSet()
-        return setOf(if (app.autoCategory in validIds) app.autoCategory else fallback)
+        return setOf(if (app.autoCategory in validIds) app.autoCategory else fallbackId)
     }
 
     /**

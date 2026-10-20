@@ -77,6 +77,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.conreo.couchytv.Actions
 import com.conreo.couchytv.data.AppEntry
+import com.conreo.couchytv.data.AppList
 import com.conreo.couchytv.data.AppRepository
 import com.conreo.couchytv.data.ConfigStore
 import com.conreo.couchytv.data.LAYOUT_DOCK
@@ -361,15 +362,19 @@ fun LauncherApp(rescanTick: Int) {
     // The dock's flat app list (all sections concatenated, de-duped). Hoisted &
     // remembered so its identity stays stable across recompositions — otherwise a
     // fresh list on every clock tick blocks DockArea from strong-skipping.
-    val dockApps = remember(categorized) {
-        categorized.flatMap { it.second }.distinctBy { it.pkg }
+    // Wrapped in the @Immutable AppList: a bare List is an UNSTABLE type in
+    // Compose, which would make every composable it is passed to unskippable.
+    val dockList = remember(categorized) {
+        AppList(categorized.flatMap { it.second }.distinctBy { it.pkg })
     }
+    val dockApps = dockList.items
     // The single row shows a CURATED set — the apps the owner pinned, in the
     // order they pinned them. An empty pin list falls back to every app, so
     // the layout is never blank on a fresh install.
-    val rowApps = remember(apps, config.dockPinned, config.hidden) {
-        selectRowApps(dockApps, apps, config.dockPinned, config.hidden)
+    val rowList = remember(apps, config.dockPinned, config.hidden, dockList) {
+        AppList(selectRowApps(dockApps, apps, config.dockPinned, config.hidden))
     }
+    val rowApps = rowList.items
     val accent = ACCENTS[config.accent.coerceIn(0, ACCENTS.size - 1)]
 
     // ----- display dimensions: size + spacing drive everything, columns
@@ -540,8 +545,11 @@ fun LauncherApp(rescanTick: Int) {
         if (!config.slideshow || !config.useCustomWallpaper) return@LaunchedEffect
         val every = config.slideshowMinutes.coerceIn(1, 240) * 60_000L
         while (true) {
-            val due = System.currentTimeMillis() -
-                com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context) >= every
+            // The stamp lives in a file: read it off the main thread.
+            val lastChange = withContext(Dispatchers.IO) {
+                com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context)
+            }
+            val due = System.currentTimeMillis() - lastChange >= every
             if (due) {
                 val changed = withContext(Dispatchers.IO) {
                     com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
@@ -781,10 +789,14 @@ fun LauncherApp(rescanTick: Int) {
                         onSettingsClick = { showSettings = true },
                     )
                 }
+                // A fresh Modifier chain is never equal to the previous one, so an
+                // inline Modifier would defeat the skip of the area below: the
+                // whole row would re-run on every clock tick. One chain, reused.
+                val areaModifier = remember { Modifier.weight(1f).fillMaxWidth() }
                 when (config.layout) {
                     LAYOUT_DOCK -> DockArea(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        apps = dockApps,
+                        modifier = areaModifier,
+                        apps = dockList,
                         config = config,
                         accent = accent,
                         movePkg = movePkg,
@@ -798,8 +810,8 @@ fun LauncherApp(rescanTick: Int) {
                         onMenu = { app -> if (movePkg == null) menuFor = app },
                     )
                     LAYOUT_SINGLE_ROW -> SingleRowArea(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        apps = rowApps,
+                        modifier = areaModifier,
+                        apps = rowList,
                         config = config,
                         accent = accent,
                         movePkg = movePkg,
@@ -1009,6 +1021,10 @@ private fun CarouselSection(
     onMenu: (AppEntry) -> Unit,
 ) {
     val state = rememberLazyListState()
+    // Built once: a fresh Modifier chain is never equal to the previous one, so
+    // an inline one would make the card's modifier parameter change and defeat
+    // the skip of the card.
+    val moveModifier = remember(moveFocus) { Modifier.focusRequester(moveFocus) }
     // Pivot scrolling done RIGHT: instead of letting the default
     // bring-into-view scroll minimally and then re-pinning by hand (two
     // fighting animations = the janky feel), we replace the scroll spec so
@@ -1042,7 +1058,7 @@ private fun CarouselSection(
                     accent = accent,
                     cardWidth = cardWidth,
                     showLabel = config.showAppLabels,
-                    modifier = if (moving) Modifier.focusRequester(moveFocus) else Modifier,
+                    modifier = if (moving) moveModifier else Modifier,
                     onLaunch = { onLaunch(app) },
                     onLongPress = { onMenu(app) },
                 )
@@ -1072,6 +1088,10 @@ private fun GridSection(
         Modifier.fillMaxWidth().padding(horizontal = 44.dp, vertical = 8.dp),
         contentAlignment = Alignment.TopStart,
     ) {
+        // Built once: a fresh Modifier chain is never equal to the previous one,
+        // so an inline one would make the card's modifier parameter change and
+        // defeat the skip of the card.
+        val moveModifier = remember(moveFocus) { Modifier.focusRequester(moveFocus) }
         // fitRow only decides how MANY columns fit; the gap is then expanded so the
         // row fills the width exactly — left margin == right margin (both 44dp) for
         // any icon size / spacing, and every section lines up column-for-column.
@@ -1111,7 +1131,7 @@ private fun GridSection(
                             accent = accent,
                             cardWidth = cardWidth,
                             showLabel = config.showAppLabels,
-                            modifier = (if (moving) Modifier.focusRequester(moveFocus) else Modifier)
+                            modifier = (if (moving) moveModifier else Modifier)
                                 .graphicsLayer {
                                     alpha = bloom
                                     val s = 0.8f + 0.2f * bloom
@@ -1143,7 +1163,7 @@ private fun GridSection(
 @Composable
 private fun SingleRowArea(
     modifier: Modifier,
-    apps: List<AppEntry>,
+    apps: AppList,
     config: LauncherConfig,
     accent: Color,
     movePkg: String?,
@@ -1155,6 +1175,18 @@ private fun SingleRowArea(
     onMenu: (AppEntry) -> Unit,
 ) {
     val rowFocus = remember { FocusRequester() }
+    // The focus modifiers are built ONCE: a fresh Modifier chain is never equal
+    // to the previous one, so an inline one would make every card's modifier
+    // parameter change and defeat the skip of the whole row.
+    val moveModifier = remember(moveFocus) { Modifier.focusRequester(moveFocus) }
+    val firstModifier = remember(rowFocus) { Modifier.focusRequester(rowFocus) }
+    // The glass panel is ~1920px wide: a generic path-mask clip (the squircle)
+    // re-rasterises the path every frame, where the round-rect clip is a
+    // cheap corner mask. Same radius, same look at this size.
+    val panelCorner = LocalCornerRadius.current
+    val panelShape = remember(panelCorner) {
+        RoundedCornerShape(panelCorner + 14.dp)
+    }
     // Claim focus over the first few frames (not after a delay): otherwise the
     // focus, briefly orphaned when the old row's node leaves, snaps to the first
     // focusable — the status-bar icon — and flashes selected before we grab it.
@@ -1169,14 +1201,15 @@ private fun SingleRowArea(
         val innerPadding = 12.dp
         val margin = 24.dp
         val available = maxWidth - margin * 2 - innerPadding * 2
-        val fit = fitSingleRow(available, apps.size, maxIcon, prefGap)
-        val shown = apps.take(fit.visibleCount)
+        val all = apps.items
+        val fit = fitSingleRow(available, all.size, maxIcon, prefGap)
+        val shown = all.take(fit.visibleCount)
         // Say it out loud when the row gets cramped — a warning nobody reads
         // is worth more in the log than a silently squashed icon.
-        if (fit.icon.value < 20f || shown.size < apps.size) {
+        if (fit.icon.value < 20f || shown.size < all.size) {
             android.util.Log.w(
                 "CouchySingleRow",
-                "${apps.size} apps in ${available.value}dp: icons ${fit.icon.value}dp, " +
+                "${all.size} apps in ${available.value}dp: icons ${fit.icon.value}dp, " +
                     "showing ${shown.size}",
             )
         }
@@ -1200,7 +1233,7 @@ private fun SingleRowArea(
                 Row(
                     Modifier
                         .padding(horizontal = margin, vertical = 8.dp)
-                        .clip(SmoothCornerShape(LocalCornerRadius.current + 14.dp))
+                        .clip(panelShape)
                         .background(Color(0xB3121418))
                         .background(Color.White.copy(alpha = 0.06f))
                         .padding(innerPadding)
@@ -1223,8 +1256,8 @@ private fun SingleRowArea(
                             // would eat the whole row.
                             showLabel = false,
                             modifier = when {
-                                moving -> Modifier.focusRequester(moveFocus)
-                                i == 0 -> Modifier.focusRequester(rowFocus)
+                                moving -> moveModifier
+                                i == 0 -> firstModifier
                                 else -> Modifier
                             },
                             onLaunch = { onLaunch(app) },
@@ -1242,7 +1275,7 @@ private fun SingleRowArea(
 @Composable
 private fun DockArea(
     modifier: Modifier,
-    apps: List<AppEntry>,
+    apps: AppList,
     config: LauncherConfig,
     accent: Color,
     movePkg: String?,
@@ -1257,6 +1290,11 @@ private fun DockArea(
 ) {
     val dockFocus = remember { FocusRequester() }
     val gridFocus = remember { FocusRequester() }
+    // Built once: a fresh Modifier chain is never equal to the previous one, so
+    // an inline one would make every card's modifier parameter change and
+    // defeat the skip of the whole grid.
+    val moveModifier = remember(moveFocus) { Modifier.focusRequester(moveFocus) }
+    val gridModifier = remember(gridFocus) { Modifier.focusRequester(gridFocus) }
     // Back closes the open grid (returns to the dock); when closed it falls
     // through to the activity's no-op, so Back never exits the home screen.
     androidx.activity.compose.BackHandler(enabled = expanded) { onExpandChange(false) }
@@ -1283,7 +1321,7 @@ private fun DockArea(
         val available = maxWidth - 80.dp - panelInnerPadding * 2
         val (cols, gapUsed) = fitRow(available, cardWidth, gap)
         val cardHeight = cardWidth * 9f / 16f
-        val rows = apps.chunked(cols)
+        val rows = apps.items.chunked(cols)
         // The grid opens focused on row 0, same column as the dock icon we came
         // from (row 0 is those same icons) — focus stays put, it doesn't jump down.
         val targetRow = 0
@@ -1387,8 +1425,8 @@ private fun DockArea(
                                         // No Up handler: Up from row 0 falls through to
                                         // the status bar. The grid closes with Back.
                                         modifier = when {
-                                            moving -> Modifier.focusRequester(moveFocus)
-                                            r == targetRow && c == targetCol -> Modifier.focusRequester(gridFocus)
+                                            moving -> moveModifier
+                                            r == targetRow && c == targetCol -> gridModifier
                                             else -> Modifier
                                         },
                                         onLaunch = { onLaunch(app) },
@@ -1428,6 +1466,18 @@ private fun DockGlassPanel(
     onMenu: (AppEntry) -> Unit,
 ) {
     Box(contentAlignment = Alignment.Center) {
+        // The frosted panel is ~1920px wide: a generic path-mask clip (the
+        // squircle) re-rasterises the path every frame, where the round-rect
+        // clip is a cheap corner mask. Same radius, same look at this size.
+        val panelCorner = LocalCornerRadius.current
+        val panelShape = remember(panelCorner) {
+            RoundedCornerShape(panelCorner + 14.dp)
+        }
+        // Built once: a fresh Modifier chain is never equal to the previous one,
+        // so an inline one would make every card's modifier parameter change
+        // and defeat the skip of the whole row.
+        val moveModifier = remember(moveFocus) { Modifier.focusRequester(moveFocus) }
+        val firstModifier = remember(dockFocus) { Modifier.focusRequester(dockFocus) }
         // Frosted background — its exit is the exact mirror of its enter: rises
         // up + fades in on close, sinks down + fades out on open (same 300ms fade
         // / 500ms S-curve slide, just reversed).
@@ -1442,7 +1492,7 @@ private fun DockGlassPanel(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .clip(SmoothCornerShape(LocalCornerRadius.current + 14.dp))
+                    .clip(panelShape)
                     .background(Color(0xB3121418))
                     .background(Color.White.copy(alpha = 0.06f))
             )
@@ -1460,6 +1510,21 @@ private fun DockGlassPanel(
             ) {
                 rowApps.forEachIndexed { i, app ->
                     val moving = app.pkg == movePkg
+                    val base = when {
+                        moving -> moveModifier
+                        i == 0 -> firstModifier
+                        else -> Modifier
+                    }
+                    // The Down-to-expand handler rides on the modifier, so the
+                    // whole chain is built once per item and then reused.
+                    val modifier = remember(base, movePkg, onExpandFrom, i) {
+                        base.onPreviewKeyEvent { e ->
+                            if (movePkg == null &&
+                                e.type == KeyEventType.KeyDown &&
+                                e.key == Key.DirectionDown
+                            ) { onExpandFrom(i); true } else false
+                        }
+                    }
                     AppCard(
                         app = app,
                         isMoving = moving,
@@ -1467,16 +1532,7 @@ private fun DockGlassPanel(
                         accent = accent,
                         cardWidth = cardWidth,
                         showLabel = config.showAppLabels,
-                        modifier = (when {
-                            moving -> Modifier.focusRequester(moveFocus)
-                            i == 0 -> Modifier.focusRequester(dockFocus)
-                            else -> Modifier
-                        }).onPreviewKeyEvent { e ->
-                            if (movePkg == null &&
-                                e.type == KeyEventType.KeyDown &&
-                                e.key == Key.DirectionDown
-                            ) { onExpandFrom(i); true } else false
-                        },
+                        modifier = modifier,
                         onLaunch = { onLaunch(app) },
                         onLongPress = { onMenu(app) },
                     )
