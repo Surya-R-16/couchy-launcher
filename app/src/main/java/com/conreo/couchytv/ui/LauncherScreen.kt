@@ -543,11 +543,11 @@ fun LauncherApp(rescanTick: Int) {
             val f = File(context.filesDir, "wallpaper.jpg")
             if (!f.exists()) null to null
             else runCatching {
-                // 1280px is indistinguishable as a scrimmed background but the
-                // texture is ~2.3× smaller than 1920 — TV GPUs choke on the
-                // first upload of full-res textures. prepareToDraw() moves the
-                // upload off the first visible frame.
-                val sharp = decodeDownsampled(f, maxWidth = 1280)
+                // 1920 instead of the original 1280: a 4K panel upscales a 1280-wide
+                // background 3× and it reads as soft. Costs ~4 MB of RGB_565 texture
+                // rather than ~1.8 MB; the upload still happens off the first visible
+                // frame via prepareToDraw().
+                val sharp = decodeDownsampled(f, maxWidth = 1920)
                     ?.also { it.prepareToDraw() }?.asImageBitmap()
                 val blurred = decodeDownsampled(f, maxWidth = 96)
                     ?.also { it.prepareToDraw() }?.asImageBitmap()
