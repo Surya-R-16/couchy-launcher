@@ -506,13 +506,8 @@ fun LauncherApp(rescanTick: Int) {
     /** Reorder the curated dock: Left/Right swap the app with its neighbour. */
     fun movePinned(delta: Int) {
         val pkg = movePkg ?: return
-        val list = config.dockPinned.toMutableList()
-        val fi = list.indexOf(pkg)
-        if (fi < 0) return
-        val target = fi + delta
-        if (target < 0 || target >= list.size) return
-        list.removeAt(fi)
-        list.add(target, pkg)
+        val list = moveWithin(config.dockPinned, pkg, delta)
+        if (list === config.dockPinned) return
         scope.launch { store.update { it.copy(dockPinned = list) } }
     }
 

@@ -673,13 +673,13 @@ private fun DisplayScreen(
     }
 
     if (pickDock) {
-        // Pinned apps first, in dock order, then everything else alphabetically —
-        // the list itself shows the order the row will have.
+        // The list stays in ONE order — alphabetical, never rearranged. An
+        // earlier version put the pinned apps first, which made the list jump
+        // under the user's finger on every tick: the focused row moved away
+        // and the app just ticked scrolled out of sight. Pinned apps show
+        // their position in the row instead.
         val byPkg = apps.associateBy { it.pkg }
-        val pinned = config.dockPinned.mapNotNull { byPkg[it] }
-        val pinnedPkgs = pinned.map { it.pkg }.toSet()
-        val rest = apps.filter { it.pkg !in pinnedPkgs }
-        val ordered = pinned + rest
+        val pinnedPkgs = config.dockPinned.mapNotNull { byPkg[it]?.pkg }.toSet()
         Dialog(onDismissRequest = { pickDock = false }) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -700,9 +700,10 @@ private fun DisplayScreen(
                     )
                     val fv = initialFocus()
                     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(ordered.size, key = { ordered[it].pkg }) { i ->
-                            val app = ordered[i]
+                        items(apps.size, key = { apps[it].pkg }) { i ->
+                            val app = apps[i]
                             val isPinned = app.pkg in pinnedPkgs
+                            val position = config.dockPinned.indexOf(app.pkg) + 1
                             SettingsItem(
                                 selected = false,
                                 onClick = {
@@ -713,7 +714,7 @@ private fun DisplayScreen(
                                 },
                                 headlineContent = { Text(app.label) },
                                 supportingContent = if (isPinned) {
-                                    { Text(stringResource(R.string.dock_apps_position, pinned.indexOfFirst { it.pkg == app.pkg } + 1)) }
+                                    { Text(stringResource(R.string.dock_apps_position, position)) }
                                 } else null,
                                 leadingContent = { AppThumb(app) },
                                 trailingContent = { CheckMark(checked = isPinned) },

@@ -13,6 +13,24 @@ import com.conreo.couchytv.data.AppEntry
  */
 
 /**
+ * Move [pkg] [delta] places along [list].
+ *
+ * Returns the list unchanged when the app is not in it or the move would fall
+ * off either end — the row has no wrap-around, so an app cannot be pushed off
+ * the edge of the screen.
+ */
+fun moveWithin(list: List<String>, pkg: String, delta: Int): List<String> {
+    val from = list.indexOf(pkg)
+    if (from < 0) return list
+    val to = from + delta
+    if (to < 0 || to >= list.size) return list
+    val out = list.toMutableList()
+    out.removeAt(from)
+    out.add(to, pkg)
+    return out
+}
+
+/**
  * Which apps the single row shows.
  *
  * [pinned] is the owner's curated list, in dock order. Two fallbacks keep the
