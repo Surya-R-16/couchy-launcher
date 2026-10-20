@@ -176,6 +176,32 @@ with `tools/bench-navigation.sh`.
 3. **Build, install, and hand the owner a list of what to press.** They test.
 4. **Re-measure.** `tools/bench-navigation.sh` before and after.
 
+## Tooling
+
+**`android` CLI** (Google's, installed to `~/.local/bin/android` — already on PATH,
+no profile file was modified). It talks to the TV over the same adb as always:
+
+```sh
+android info                                          # sdk, version
+android layout --device=192.168.1.4:5555 --pretty    # the view/semantics tree as JSON
+android screen capture --device=... --output=x.png    # screenshot
+android screen capture --device=... --annotate        # + numbered bounding boxes
+android screen resolve --screenshot=x.png --string="tap the gear at #12"
+android input ...                                     # gestures and key events
+```
+
+**`android layout` is the important one.** It returns every element with its
+exact bounds, so "is this inside the 5% safe zone" and "do these two pills
+line up" become arithmetic instead of eyeballing a screenshot. It reads the
+Compose semantics tree, so it sees what a D-pad user sees.
+
+`android screen capture --annotate` + `resolve` closes the loop: look at the
+numbered screenshot, refer to `#12`, get real coordinates back.
+
+Note `android skills` installs into the CLI's own skill directory, which pi does
+not read — that is why the relevant skills are **vendored into `.pi/skills/`**
+instead.
+
 ## Where the detail lives
 
 `NOTES.local.md` in the repo root (gitignored) — the fork's work log: what was changed
