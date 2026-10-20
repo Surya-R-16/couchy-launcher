@@ -25,6 +25,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.conreo.couchytv.data.NetStatus
+import com.conreo.couchytv.data.SystemStats
 
 @Composable
 fun StatusBar(
@@ -36,6 +37,7 @@ fun StatusBar(
     onVpnClick: () -> Unit,
     onNetworkClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    stats: SystemStats?,
 ) {
     // Optional glass panel behind the icon cluster — same look as the dock
     // panel, corners follow the roundness setting.
@@ -56,9 +58,17 @@ fun StatusBar(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 40.dp, vertical = 18.dp),
-        horizontalArrangement = Arrangement.End,
+        // The readouts sit on the left, the icon cluster on the right — both
+        // centred on the same line, so the two ends of the bar line up.
+        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+      stats?.let {
+          SystemStatsChip(
+              stats = it,
+              modifier = Modifier.padding(end = 12.dp),
+          )
+      }
       Row(
         modifier = cluster,
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),

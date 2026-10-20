@@ -47,12 +47,15 @@ fun readSystemStats(context: Context): SystemStats {
     )
 }
 
-/** "1.8 GB" / "412 MB" — enough precision to be useful, short enough to read. */
+/**
+ * "1.7G" / "853M" — compact units, for a readout that has to stay narrow.
+ * Enough precision to be useful, short enough to read across a room.
+ */
 fun formatBytes(mb: Long): String = when {
     mb >= 1024L -> {
         val gb = mb / 1024.0
-        // One decimal below 10 GB, none above — "1.8 GB", "12 GB".
-        if (gb >= 10.0) "${gb.toInt()} GB" else String.format("%.1f GB", gb)
+        // One decimal below 10 GB, none above — "1.7G", "12G".
+        if (gb >= 10.0) "${gb.toInt()}G" else String.format("%.1fG", gb)
     }
-    else -> "$mb MB"
+    else -> "${mb}M"
 }

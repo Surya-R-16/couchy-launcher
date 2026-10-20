@@ -800,6 +800,7 @@ fun LauncherApp(rescanTick: Int) {
                         },
                         onNetworkClick = { Actions.openNetworkSettings(context) },
                         onSettingsClick = { showSettings = true },
+                        stats = sysStats,
                     )
                 }
                 // A fresh Modifier chain is never equal to the previous one, so an
@@ -832,7 +833,6 @@ fun LauncherApp(rescanTick: Int) {
                         maxIcon = cardWidth,
                         prefGap = gap,
                         intro = introShown,
-                        stats = sysStats,
                         onLaunch = { app -> if (movePkg == null) Actions.launchApp(context, app.pkg) },
                         onMenu = { app -> if (movePkg == null) menuFor = app },
                     )
@@ -1185,7 +1185,6 @@ private fun SingleRowArea(
     maxIcon: Dp,
     prefGap: Dp,
     intro: Boolean,
-    stats: SystemStats?,
     onLaunch: (AppEntry) -> Unit,
     onMenu: (AppEntry) -> Unit,
 ) {
@@ -1235,15 +1234,6 @@ private fun SingleRowArea(
             label = "singleRowIntro",
         )
         Column(Modifier.fillMaxSize()) {
-            // Top-left: memory and storage. Both numbers move slowly, so they
-            // refresh on resume and once a minute — a per-second timer would
-            // recompose the screen every second for numbers that never change.
-            stats?.let {
-                SystemStatsRow(
-                    stats = it,
-                    modifier = Modifier.padding(start = 40.dp, top = 10.dp),
-                )
-            }
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier

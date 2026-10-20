@@ -4,11 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -25,91 +22,77 @@ import com.conreo.couchytv.data.SystemStats
 import com.conreo.couchytv.data.formatBytes
 
 /**
- * Memory and storage, in the top-left of the home screen.
+ * Memory and storage, in the top-left corner of the home screen.
  *
- * Two small glass pills, in the same language as the status bar so the top of
- * the screen reads as one thing. Both numbers move slowly, so they refresh on
- * resume and once a minute — never on a timer that would recompose the screen
- * every second.
+ * ONE compact glass pill, the same height and material as the status cluster
+ * on the right, so the two ends of the top bar line up. Text only — a bar
+ * looked busy and the pill grew too wide for what it said.
+ *
+ * The numbers move slowly, so they refresh on resume and once a minute; a
+ * per-second timer would recompose the home screen every second for figures
+ * that never change.
  */
 @Composable
-internal fun SystemStatsRow(
+internal fun SystemStatsChip(
     stats: SystemStats,
     modifier: Modifier = Modifier,
 ) {
+    // Same corner radius and material as the status cluster beside it.
+    val corner = LocalCornerRadius.current
     Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(corner))
+            .background(Color(0xB3121418))
+            .background(Color.White.copy(alpha = 0.06f))
+            .padding(horizontal = 14.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        StatPill(
-            label = stringResource(R.string.stat_ram),
-            used = formatBytes(stats.ramUsedMb.toLong()),
-            total = formatBytes(stats.ramTotalMb.toLong()),
-            fraction = stats.ramFraction,
-        )
-        StatPill(
-            label = stringResource(R.string.stat_storage),
-            used = formatBytes(stats.storageTotalMb - stats.storageFreeMb),
-            total = formatBytes(stats.storageTotalMb),
-            fraction = stats.storageFraction,
-        )
+        // The inner row is forced to the height of a status icon (40dp) so the
+        // chip is exactly as tall as the glass cluster on the other side.
+        Row(
+            modifier = Modifier.height(40.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            StatValue(
+                label = stringResource(R.string.stat_ram),
+                value = "${formatBytes(stats.ramUsedMb.toLong())}/${formatBytes(stats.ramTotalMb.toLong())}",
+            )
+            Divider()
+            StatValue(
+                label = stringResource(R.string.stat_storage),
+                value = "${formatBytes(stats.storageFreeMb)} free",
+            )
+        }
     }
 }
 
-/**
- * One readout: a label, a thin usage bar and the numbers.
- *
- * The bar is what reads from across the room; the numbers are there for
- * anyone who walks up to the TV.
- */
+/** A dim label with the value beside it. */
 @Composable
-private fun StatPill(
-    label: String,
-    used: String,
-    total: String,
-    fraction: Float,
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xB3121418))
-            .background(Color.White.copy(alpha = 0.06f))
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
+private fun StatValue(label: String, value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color.White.copy(alpha = 0.7f),
+            color = Color.White.copy(alpha = 0.55f),
         )
-        UsageBar(fraction)
         Text(
-            text = "$used / $total",
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.White,
+            text = value,
+            style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+            color = Color.White.copy(alpha = 0.9f),
+            modifier = Modifier.padding(start = 6.dp),
         )
     }
 }
 
-/** A thin bar: filled portion over a faint track. */
+/** A hairline between the two readouts. */
 @Composable
-private fun UsageBar(fraction: Float) {
-    val fill = fraction.coerceIn(0f, 1f)
+private fun Divider() {
     Box(
         Modifier
-            .width(90.dp)
-            .height(5.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(Color.White.copy(alpha = 0.16f)),
-    ) {
-        Box(
-            Modifier
-                .fillMaxHeight()
-                .width(90.dp * fill)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Color.White.copy(alpha = 0.85f)),
-        )
-    }
+            .width(1.dp)
+            .height(14.dp)
+            .background(Color.White.copy(alpha = 0.18f)),
+    )
 }
