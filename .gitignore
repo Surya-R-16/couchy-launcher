@@ -30,3 +30,6 @@ pi-session-*.html
 *.session.html
 .env
 .dsx/
+
+# Personal work notes (not part of the project)
+NOTES.local.md

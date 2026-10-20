@@ -66,11 +66,17 @@ private fun MenuDialog(
     title: String,
     entries: List<MenuEntry>,
     onDismiss: () -> Unit,
+    // True for long-press menus: the dialog appears while OK is still physically
+    // HELD, and the dialog never sees that initial KeyUp — so the first release
+    // and every auto-repeat of the hold would land on the first entry.
+    // False for any menu opened by a click, where swallowing that release just
+    // eats the user's first press.
+    guardHeldKey: Boolean = true,
 ) {
     // The menu opens while the OK button is still physically HELD (long-press).
     // Ignore every OK event — held repeats AND the final release — until the
     // button has been fully released once. Only a fresh press activates items.
-    var released by remember { mutableStateOf(false) }
+    var released by remember { mutableStateOf(!guardHeldKey) }
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(16.dp),
