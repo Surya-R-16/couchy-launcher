@@ -33,3 +33,6 @@ pi-session-*.html
 
 # Personal work notes (not part of the project)
 NOTES.local.md
+
+# Local git hooks (not part of the project)
+.githooks/

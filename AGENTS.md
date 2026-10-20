@@ -99,11 +99,93 @@ What is expensive here, and why:
    runs from the local `post-push` hook. `/sdcard` on this TV is a MEDIA directory:
    the owner's photos are in `Pictures/`, `DCIM/`, `Movies/`. Only root-level PNGs are ours.
 
+## UI/UX rules for changes to the look
+
+Goal: modernize the UI with **small, reviewable** changes. Never break D-pad
+navigation, and never regress the measured performance above.
+
+### Read these before touching anything visual
+
+- Android TV design hub: https://developer.android.com/design/ui/tv
+- TV colour system: https://developer.android.com/design/ui/tv/guides/styles/color-system
+- Compose for TV: https://developer.android.com/training/tv/playback/compose
+- TV layouts and overscan: https://developer.android.com/training/tv/playback/compose/layouts
+- Adaptive TV guide (focus, overscan): https://developer.android.com/develop/adaptive-apps/guides/tv/build-adaptive-apps-for-tv
+- Fire TV guidelines: https://developer.amazon.com/docs/fire-tv/design-and-user-experience-guidelines.html
+- tv-material releases: https://developer.android.com/jetpack/androidx/releases/tv
+
+### Use the TV design system, not the phone one
+
+**`androidx.tv.material3.*` — never `androidx.compose.material3.*`.** The phone
+material3 artifact is not even a dependency here, and its `MaterialTheme.typography`
+does not exist in this theme. (This was got wrong once already, in the status
+readout.) `androidx.tv:tv-material:1.0.0` does ship `Card`, `Button`, `Chip`,
+`Carousel`, `ListItem`, `NavigationDrawer`, `Switch`, `Tab`, `IconButton`,
+`Checkbox`, `RadioButton` — verified against the artifact, not assumed.
+
+The `theming/styles` skill in `.pi/skills/` needs an **alpha** Compose and the
+experimental Styles API. We are on stable (BOM 2024.09.03) — it does not apply
+to this project.
+
+### Design rules
+
+- **10ft UI.** The viewer is ~3 m away: large, bold, sans-serif. No thin weights.
+  tv-material's default type scale is already TV-sized; we do not override it
+  (only three hard-coded `sp` values exist in the whole app).
+- **Bold contrast.** Subtle colour differences vanish on a TV, and the launcher
+  draws over arbitrary video wallpapers. The status and dock glass exists for
+  exactly this reason.
+- **Low information density.** Uncluttered beats clever.
+- **5% overscan-safe margin.** The TV design guidance asks for it; **we do not
+  currently keep it** — the status bar uses 40 dp of 1200 dp (3.3%) and the
+  single-row panel 24 dp (2%). This TV has no overscan so it looks fine, but on
+  a set that does, the clock and the row's end icons would be clipped. Fixing it
+  is a deliberate decision, not an oversight — the layout gets smaller.
+- **Tokens in ONE place.** Colours, type, corner radius, spacing and the glass
+  material belong in `ui/Theme.kt` and nowhere else. Today the glass colour
+  `Color(0xB3121418)` is hard-coded in four files — that is the debt to pay
+  during the visual refresh.
+
+### Focus — read this before "improving" the focus state
+
+Google's own immersive-list spec says a focused card is emphasised by
+**scaling it by 1.1, using a border, and elevation**. We currently use **only
+the border**, because the scale is a hard-coded 300 ms tween in tv-material
+(13 frames per key press, ~34 ms each on this TV) and the elevation is a Skia
+blur mask. Removing them took high input latency from 69 to 11.
+
+The border stays. If the scale is brought back, it needs a **short tween we
+control** (100–150 ms), not tv-material's default — and it must be re-measured
+with `tools/bench-navigation.sh`.
+
+### Navigation and focus — do not regress
+
+- Every element reachable by D-pad. No focus traps. Back always works.
+- Restore focus when returning to a row or a screen (`focusRestorer`).
+- Set the initial focus explicitly on every screen.
+- The long-press menu and "move" mode rely on **auto-repeat** (the remote
+  holding OK). `input keyevent` cannot reproduce it — see the device section.
+
+### Workflow for a visual change
+
+1. **Pick a direction first.** "Modernize it" produces beige. `design-refs/`
+   holds the before/after screenshots; match the *feel* of a reference, not a
+   description of one.
+2. **One surface at a time** — cards, then the row, then the status bar, then
+   settings. Small diffs stay reviewable; a big redesign breaks focus.
+3. **Build, install, and hand the owner a list of what to press.** They test.
+4. **Re-measure.** `tools/bench-navigation.sh` before and after.
+
 ## Where the detail lives
 
 `NOTES.local.md` in the repo root (gitignored) — the fork's work log: what was changed
 and why, the device quirks, the upstream issue triage, and the perf measurements.
 `~/Work/BOARD.md` — the cross-project board.
+
+`.pi/skills/` — Google's official Android agent skills (Apache-2.0, from
+`github.com/android/skills`), vendored into the repo: Compose performance,
+adaptive layouts, navigation events, and the Android CLI. Read the relevant one
+before a change in its area.
 
 ## Upstream
 
