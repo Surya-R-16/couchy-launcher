@@ -34,6 +34,8 @@ data class LauncherConfig(
     val hidden: Set<String> = emptySet(),
     /** packages seen on the last scan — new installs are auto-added to the first section */
     val knownApps: Set<String> = emptySet(),
+    /** packages pinned to the single-row dock, in order; empty = every app */
+    val dockPinned: List<String> = emptyList(),
     val wallpaper: Int = 1, // Aurora
     val useCustomWallpaper: Boolean = false,
     /** rotate through the images in Pictures/Slideshow instead of one fixed photo */

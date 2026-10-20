@@ -84,6 +84,12 @@
     <string name="mode_dock">Dock</string>
     <string name="mode_single_row">Single row</string>
     <string name="mode_single_row_desc">Every app in one row at the bottom — icons shrink to fit, the wallpaper stays sharp</string>
+    <string name="dock_apps">Dock apps</string>
+    <string name="dock_apps_all">Showing every app — pin the ones you want</string>
+    <string name="dock_apps_count">%1$d apps in the row</string>
+    <string name="dock_apps_picker_title">Dock apps</string>
+    <string name="dock_apps_picker_sub">Tick the apps for the row. Reorder them on the home screen (hold OK, then Move).</string>
+    <string name="dock_apps_position">Position %1$d in the row</string>
     <string name="mode_carousel_desc">Selection stays fixed — the icons scroll under it</string>
     <string name="mode_grid_desc">All icons contained on screen — the selection moves</string>
     <string name="mode_dock_desc">Floating dock at the bottom — Down expands over a blurred wallpaper</string>

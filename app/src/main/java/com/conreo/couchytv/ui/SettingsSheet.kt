@@ -342,6 +342,7 @@ fun SettingsSheet(
                     )
                     SettingsScreen.Display -> DisplayScreen(
                         config = config,
+                        apps = apps,
                         store = store,
                         onBack = { screen = SettingsScreen.Main },
                     )
@@ -568,10 +569,12 @@ private fun AboutScreen(
 @Composable
 private fun DisplayScreen(
     config: LauncherConfig,
+    apps: List<AppEntry>,
     store: ConfigStore,
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    var pickDock by remember { mutableStateOf(false) }
     fun update(transform: (LauncherConfig) -> LauncherConfig) {
         scope.launch { store.update(transform) }
     }
@@ -616,6 +619,23 @@ private fun DisplayScreen(
                 trailingContent = { CheckMark(checked = config.showCategoryNames) },
             )
         }
+        // The single row shows a curated set of apps — which ones is the
+        // owner's call, so let them pin and unpin.
+        if (config.layout == LAYOUT_SINGLE_ROW) {
+            val pinned = config.dockPinned.count { pkg -> apps.any { it.pkg == pkg } }
+            SettingsItem(
+                selected = false,
+                onClick = { pickDock = true },
+                headlineContent = { Text(stringResource(R.string.dock_apps)) },
+                supportingContent = {
+                    Text(
+                        if (pinned == 0) stringResource(R.string.dock_apps_all)
+                        else stringResource(R.string.dock_apps_count, pinned)
+                    )
+                },
+                leadingContent = { Icon(AppIcons.Apps, contentDescription = null) },
+            )
+        }
         SectionLabel(stringResource(R.string.section_size))
         run {
             val labels = listOf(stringResource(R.string.scale_auto), "75%", "90%", "100%", "115%", "130%")
@@ -650,6 +670,60 @@ private fun DisplayScreen(
             current = config.spacing.coerceIn(0, 4),
             onSelect = { v -> update { it.copy(spacing = v) } },
         )
+    }
+
+    if (pickDock) {
+        // Pinned apps first, in dock order, then everything else alphabetically —
+        // the list itself shows the order the row will have.
+        val byPkg = apps.associateBy { it.pkg }
+        val pinned = config.dockPinned.mapNotNull { byPkg[it] }
+        val pinnedPkgs = pinned.map { it.pkg }.toSet()
+        val rest = apps.filter { it.pkg !in pinnedPkgs }
+        val ordered = pinned + rest
+        Dialog(onDismissRequest = { pickDock = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                colors = SurfaceDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.width(380.dp).height(480.dp),
+            ) {
+                Column(Modifier.fillMaxSize().padding(16.dp)) {
+                    Text(
+                        stringResource(R.string.dock_apps_picker_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 8.dp, bottom = 4.dp),
+                    )
+                    Text(
+                        stringResource(R.string.dock_apps_picker_sub),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp, bottom = 10.dp),
+                    )
+                    val fv = initialFocus()
+                    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(ordered.size, key = { ordered[it].pkg }) { i ->
+                            val app = ordered[i]
+                            val isPinned = app.pkg in pinnedPkgs
+                            SettingsItem(
+                                selected = false,
+                                onClick = {
+                                    update {
+                                        if (isPinned) it.copy(dockPinned = it.dockPinned - app.pkg)
+                                        else it.copy(dockPinned = it.dockPinned + app.pkg)
+                                    }
+                                },
+                                headlineContent = { Text(app.label) },
+                                supportingContent = if (isPinned) {
+                                    { Text(stringResource(R.string.dock_apps_position, pinned.indexOfFirst { it.pkg == app.pkg } + 1)) }
+                                } else null,
+                                leadingContent = { AppThumb(app) },
+                                trailingContent = { CheckMark(checked = isPinned) },
+                                modifier = if (i == 0) Modifier.focusRequester(fv) else Modifier,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

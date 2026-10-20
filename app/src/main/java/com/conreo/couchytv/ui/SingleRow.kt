@@ -2,6 +2,7 @@ package com.conreo.couchytv.ui
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.conreo.couchytv.data.AppEntry
 
 /**
  * The single-row layout: every app in ONE line at the bottom of the screen,
@@ -10,6 +11,25 @@ import androidx.compose.ui.unit.dp
  * This file holds the sizing maths on its own, free of any Android or Compose
  * runtime state, so it can be unit-tested on the JVM.
  */
+
+/**
+ * Which apps the single row shows.
+ *
+ * [pinned] is the owner's curated list, in dock order. Two fallbacks keep the
+ * home screen from ever being empty: no pins at all (a fresh install) and
+ * pins that no longer resolve to an installed app (everything uninstalled).
+ * The row must never be blank — a launcher with nothing on it is broken.
+ */
+fun selectRowApps(
+    all: List<AppEntry>,
+    apps: List<AppEntry>,
+    pinned: List<String>,
+): List<AppEntry> {
+    if (pinned.isEmpty()) return all
+    val byPkg = apps.associateBy { it.pkg }
+    val chosen = pinned.mapNotNull { byPkg[it] }
+    return if (chosen.isEmpty()) all else chosen
+}
 
 /** How [fitSingleRow] laid the apps out. */
 data class SingleRowFit(

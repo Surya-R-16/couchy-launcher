@@ -364,6 +364,12 @@ fun LauncherApp(rescanTick: Int) {
     val dockApps = remember(categorized) {
         categorized.flatMap { it.second }.distinctBy { it.pkg }
     }
+    // The single row shows a CURATED set — the apps the owner pinned, in the
+    // order they pinned them. An empty pin list falls back to every app, so
+    // the layout is never blank on a fresh install.
+    val rowApps = remember(apps, config.dockPinned) {
+        selectRowApps(dockApps, apps, config.dockPinned)
+    }
     val accent = ACCENTS[config.accent.coerceIn(0, ACCENTS.size - 1)]
 
     // ----- display dimensions: size + spacing drive everything, columns
@@ -497,10 +503,25 @@ fun LauncherApp(rescanTick: Int) {
         }
     }
 
+    /** Reorder the curated dock: Left/Right swap the app with its neighbour. */
+    fun movePinned(delta: Int) {
+        val pkg = movePkg ?: return
+        val list = config.dockPinned.toMutableList()
+        val fi = list.indexOf(pkg)
+        if (fi < 0) return
+        val target = fi + delta
+        if (target < 0 || target >= list.size) return
+        list.removeAt(fi)
+        list.add(target, pkg)
+        scope.launch { store.update { it.copy(dockPinned = list) } }
+    }
+
     fun moveHorizontal(delta: Int) = when (config.layout) {
         LAYOUT_DOCK -> moveDock(delta)
-        // One row: Left/Right swap with the neighbour, exactly like the dock.
-        LAYOUT_SINGLE_ROW -> moveDock(delta)
+        // One row: Left/Right swap with the neighbour. With a curated dock
+        // that reorders the pinned list; with no pins it reorders the sections
+        // like the dock does.
+        LAYOUT_SINGLE_ROW -> if (config.dockPinned.isEmpty()) moveDock(delta) else movePinned(delta)
         else -> moveWithinRow(delta)
     }
 
@@ -513,7 +534,7 @@ fun LauncherApp(rescanTick: Int) {
     }
 
     val moveFocus = remember { FocusRequester() }
-    LaunchedEffect(categorized, movePkg) {
+    LaunchedEffect(categorized, config.dockPinned, movePkg) {
         if (movePkg != null) runCatching { moveFocus.requestFocus() }
     }
 
@@ -783,7 +804,7 @@ fun LauncherApp(rescanTick: Int) {
                     )
                     LAYOUT_SINGLE_ROW -> SingleRowArea(
                         modifier = Modifier.weight(1f).fillMaxWidth(),
-                        apps = dockApps,
+                        apps = rowApps,
                         config = config,
                         accent = accent,
                         movePkg = movePkg,
