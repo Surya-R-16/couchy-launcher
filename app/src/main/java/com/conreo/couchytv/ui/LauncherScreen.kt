@@ -367,8 +367,8 @@ fun LauncherApp(rescanTick: Int) {
     // The single row shows a CURATED set — the apps the owner pinned, in the
     // order they pinned them. An empty pin list falls back to every app, so
     // the layout is never blank on a fresh install.
-    val rowApps = remember(apps, config.dockPinned) {
-        selectRowApps(dockApps, apps, config.dockPinned)
+    val rowApps = remember(apps, config.dockPinned, config.hidden) {
+        selectRowApps(dockApps, apps, config.dockPinned, config.hidden)
     }
     val accent = ACCENTS[config.accent.coerceIn(0, ACCENTS.size - 1)]
 
@@ -942,9 +942,13 @@ fun LauncherApp(rescanTick: Int) {
                         menuFor = null
                         scope.launch {
                             store.update {
+                                val hiding = app.pkg !in it.hidden
                                 it.copy(
-                                    hidden = if (app.pkg in it.hidden) it.hidden - app.pkg
-                                    else it.hidden + app.pkg
+                                    hidden = if (hiding) it.hidden + app.pkg else it.hidden - app.pkg,
+                                    // A hidden app leaves the row entirely — so it
+                                    // must not stay pinned either, or the picker
+                                    // would count a slot for an app nobody sees.
+                                    dockPinned = if (hiding) it.dockPinned - app.pkg else it.dockPinned,
                                 )
                             }
                         }

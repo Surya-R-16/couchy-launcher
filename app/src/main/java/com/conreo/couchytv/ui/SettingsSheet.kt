@@ -362,7 +362,13 @@ fun SettingsSheet(
                         onToggleHide = { pkg ->
                             scope.launch {
                                 store.update { c ->
-                                    c.copy(hidden = if (pkg in c.hidden) c.hidden - pkg else c.hidden + pkg)
+                                    val hiding = pkg !in c.hidden
+                                    c.copy(
+                                        hidden = if (hiding) c.hidden + pkg else c.hidden - pkg,
+                                        // Hiding an app takes it out of the single
+                                        // row too — it must not stay pinned.
+                                        dockPinned = if (hiding) c.dockPinned - pkg else c.dockPinned,
+                                    )
                                 }
                             }
                         },
@@ -622,7 +628,8 @@ private fun DisplayScreen(
         // The single row shows a curated set of apps — which ones is the
         // owner's call, so let them pin and unpin.
         if (config.layout == LAYOUT_SINGLE_ROW) {
-            val pinned = config.dockPinned.count { pkg -> apps.any { it.pkg == pkg } }
+            val visiblePkgs = apps.map { it.pkg }.toSet() - config.hidden
+            val pinned = config.dockPinned.count { it in visiblePkgs }
             SettingsItem(
                 selected = false,
                 onClick = { pickDock = true },
@@ -678,8 +685,13 @@ private fun DisplayScreen(
         // under the user's finger on every tick: the focused row moved away
         // and the app just ticked scrolled out of sight. Pinned apps show
         // their position in the row instead.
-        val byPkg = apps.associateBy { it.pkg }
-        val pinnedPkgs = config.dockPinned.mapNotNull { byPkg[it]?.pkg }.toSet()
+        // Hidden apps are left out — they cannot be in the row.
+        val visible = apps.filter { it.pkg !in config.hidden }
+        val byPkg = visible.associateBy { it.pkg }
+        // Only pins that are actually visible count: a hidden app holds no
+        // slot in the row, so it must not shift the positions of the others.
+        val visiblePinned = config.dockPinned.filter { byPkg.containsKey(it) }
+        val pinnedPkgs = visiblePinned.toSet()
         Dialog(onDismissRequest = { pickDock = false }) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
@@ -700,10 +712,10 @@ private fun DisplayScreen(
                     )
                     val fv = initialFocus()
                     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(apps.size, key = { apps[it].pkg }) { i ->
-                            val app = apps[i]
+                        items(visible.size, key = { visible[it].pkg }) { i ->
+                            val app = visible[i]
                             val isPinned = app.pkg in pinnedPkgs
-                            val position = config.dockPinned.indexOf(app.pkg) + 1
+                            val position = visiblePinned.indexOf(app.pkg) + 1
                             SettingsItem(
                                 selected = false,
                                 onClick = {

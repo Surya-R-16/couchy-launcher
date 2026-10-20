@@ -33,20 +33,29 @@ fun moveWithin(list: List<String>, pkg: String, delta: Int): List<String> {
 /**
  * Which apps the single row shows.
  *
- * [pinned] is the owner's curated list, in dock order. Two fallbacks keep the
- * home screen from ever being empty: no pins at all (a fresh install) and
- * pins that no longer resolve to an installed app (everything uninstalled).
- * The row must never be blank — a launcher with nothing on it is broken.
+ * [pinned] is the owner's curated list, in dock order. A hidden app NEVER
+ * shows in the row — "hide from launcher" means gone, not greyed out (the
+ * other layouts filter hidden apps out too; this one has to do the same).
+ *
+ * Two fallbacks keep the home screen from ever being empty: no pins at all
+ * (a fresh install) and pins that no longer resolve to a visible app
+ * (everything uninstalled or hidden). The row must never be blank — a
+ * launcher with nothing on it is broken.
  */
 fun selectRowApps(
     all: List<AppEntry>,
     apps: List<AppEntry>,
     pinned: List<String>,
+    hidden: Set<String> = emptySet(),
 ): List<AppEntry> {
-    if (pinned.isEmpty()) return all
-    val byPkg = apps.associateBy { it.pkg }
-    val chosen = pinned.mapNotNull { byPkg[it] }
-    return if (chosen.isEmpty()) all else chosen
+    val visible = apps.filter { it.pkg !in hidden }
+    val byPkg = visible.associateBy { it.pkg }
+    val chosen = if (pinned.isEmpty()) {
+        all.filter { it.pkg !in hidden }
+    } else {
+        pinned.mapNotNull { byPkg[it] }
+    }
+    return if (chosen.isEmpty()) visible else chosen
 }
 
 /** How [fitSingleRow] laid the apps out. */

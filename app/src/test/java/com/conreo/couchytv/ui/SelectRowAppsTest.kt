@@ -63,4 +63,22 @@ class SelectRowAppsTest {
         assertEquals(3, selectRowApps(all, all, emptyList()).size)
         assertEquals(3, selectRowApps(all, all, listOf("nope")).size)
     }
+
+    @Test
+    fun `a hidden app is gone from the row, not greyed out`() {
+        val row = selectRowApps(all, all, listOf("a", "b", "c"), hidden = setOf("b"))
+        assertEquals(listOf("a", "c"), row.map { it.pkg })
+    }
+
+    @Test
+    fun `a hidden app is gone from the fallback list too`() {
+        val row = selectRowApps(all, all, emptyList(), hidden = setOf("b"))
+        assertEquals(listOf("a", "c"), row.map { it.pkg })
+    }
+
+    @Test
+    fun `hiding every pinned app falls back to the visible ones`() {
+        val row = selectRowApps(all, all, listOf("a", "b"), hidden = setOf("a", "b"))
+        assertEquals(listOf("c"), row.map { it.pkg })
+    }
 }
