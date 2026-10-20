@@ -25,6 +25,8 @@
     <string name="minutes_short">%1$d min</string>
 
     <!-- Status bar -->
+    <string name="stat_ram">RAM</string>
+    <string name="stat_storage">Storage</string>
     <string name="cd_vpn">VPN</string>
     <string name="cd_network">Network</string>
     <string name="cd_settings">Settings</string>

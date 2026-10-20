@@ -85,7 +85,9 @@ import com.conreo.couchytv.data.LAYOUT_GRID
 import com.conreo.couchytv.data.LAYOUT_SINGLE_ROW
 import com.conreo.couchytv.data.LauncherConfig
 import com.conreo.couchytv.data.NetStatus
+import com.conreo.couchytv.data.SystemStats
 import com.conreo.couchytv.data.networkStatusFlow
+import com.conreo.couchytv.data.readSystemStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOn
@@ -326,6 +328,17 @@ fun LauncherApp(rescanTick: Int) {
         while (true) {
             value = fmt.format(Date())
             delay(60_000L - System.currentTimeMillis() % 60_000L + 50L)
+        }
+    }
+
+    // Memory + storage for the top-left readout. Refreshed on resume and once
+    // a minute: both numbers move slowly, and a per-second timer would
+    // recompose the home screen every second for numbers that never change.
+    val sysStats by produceState(initialValue = null as SystemStats?, resumeTick) {
+        value = readSystemStats(context)
+        while (true) {
+            delay(60_000L)
+            value = readSystemStats(context)
         }
     }
 
@@ -819,6 +832,7 @@ fun LauncherApp(rescanTick: Int) {
                         maxIcon = cardWidth,
                         prefGap = gap,
                         intro = introShown,
+                        stats = sysStats,
                         onLaunch = { app -> if (movePkg == null) Actions.launchApp(context, app.pkg) },
                         onMenu = { app -> if (movePkg == null) menuFor = app },
                     )
@@ -1171,6 +1185,7 @@ private fun SingleRowArea(
     maxIcon: Dp,
     prefGap: Dp,
     intro: Boolean,
+    stats: SystemStats?,
     onLaunch: (AppEntry) -> Unit,
     onMenu: (AppEntry) -> Unit,
 ) {
@@ -1220,6 +1235,15 @@ private fun SingleRowArea(
             label = "singleRowIntro",
         )
         Column(Modifier.fillMaxSize()) {
+            // Top-left: memory and storage. Both numbers move slowly, so they
+            // refresh on resume and once a minute — a per-second timer would
+            // recompose the screen every second for numbers that never change.
+            stats?.let {
+                SystemStatsRow(
+                    stats = it,
+                    modifier = Modifier.padding(start = 40.dp, top = 10.dp),
+                )
+            }
             Spacer(Modifier.weight(1f))
             Box(
                 Modifier
