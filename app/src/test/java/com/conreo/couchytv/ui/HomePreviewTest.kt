@@ -48,4 +48,21 @@ class HomePreviewTest {
             HomePreview()
         }
     }
+
+    @Test
+    fun variantA_tile() = paparazzi.snapshot { HomePreview(style = AppCardStyle.Tile) }
+
+    @Test
+    fun variantB_graphite() = paparazzi.snapshot { HomePreview(style = AppCardStyle.Graphite) }
+
+    @Test
+    fun variantC_bare() = paparazzi.snapshot { HomePreview(style = AppCardStyle.Bare) }
+
+    /** The case that used to wrap the clock onto two lines. */
+    @Test
+    fun homeWithDate() {
+        paparazzi.snapshot {
+            HomePreview(showDate = true)
+        }
+    }
 }

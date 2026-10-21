@@ -70,7 +70,11 @@ fun StatusBar(
           )
       }
       Row(
-        modifier = cluster,
+        // weight(fill = false): the cluster yields width to the readout chip
+        // instead of being squeezed. Without it, a chip + date + clock that
+        // together exceed the bar squeezes this row and the CLOCK WRAPS onto
+        // two lines ("10:" / "57") — it did exactly that.
+        modifier = cluster.weight(1f, fill = false),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
       ) {
@@ -104,7 +108,14 @@ fun StatusBar(
                 text = date,
                 style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                 color = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier.padding(start = 10.dp),
+                // The date is the first thing to give up room: one line,
+                // tail ellipsis, and it absorbs the squeeze. Without the
+                // weight the CLOCK gets clipped or wrapped instead.
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(start = 10.dp)
+                    .weight(1f, fill = false),
             )
         }
         Text(
@@ -112,6 +123,9 @@ fun StatusBar(
             text = time,
             style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
             color = Color.White,
+            // The clock is the one thing that must never wrap or truncate.
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier.padding(start = 10.dp),
         )
       }

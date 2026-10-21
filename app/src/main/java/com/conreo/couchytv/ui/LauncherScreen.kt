@@ -1187,6 +1187,9 @@ internal fun SingleRowArea(
     intro: Boolean,
     onLaunch: (AppEntry) -> Unit,
     onMenu: (AppEntry) -> Unit,
+    // Which card look to draw. A design-selection knob; defaults to the
+    // current look so nothing changes for the app itself.
+    style: AppCardStyle = AppCardStyle.Tile,
 ) {
     val rowFocus = remember { FocusRequester() }
     // The focus modifiers are built ONCE: a fresh Modifier chain is never equal
@@ -1266,6 +1269,7 @@ internal fun SingleRowArea(
                             accent = accent,
                             cardWidth = fit.icon,
                             square = true,
+                            style = style,
                             // No labels: at dock size a name under every icon
                             // would eat the whole row.
                             showLabel = false,

@@ -35,7 +35,8 @@ import com.conreo.couchytv.data.SystemStats
 internal fun HomePreview(
     showClock: Boolean = true,
     showStats: Boolean = true,
-    variant: Int = 0,
+    showDate: Boolean = false,
+    style: AppCardStyle = AppCardStyle.Tile,
 ) {
     val density = LocalDensity.current
     val apps = remember { fakeApps() }
@@ -56,7 +57,7 @@ internal fun HomePreview(
             StatusBar(
                 net = NetStatus(wifi = true),
                 time = "10:57",
-                date = "Mon 20 Oct",
+                date = if (showDate) "Mon 20 Oct" else "",
                 showVpn = false,
                 glass = true,
                 onVpnClick = {},
@@ -85,6 +86,7 @@ internal fun HomePreview(
             intro = true,
             onLaunch = {},
             onMenu = {},
+            style = style,
         )
     }
 }
@@ -114,22 +116,32 @@ private fun fakeApps(): List<AppEntry> {
     }
 }
 
-/** A square tile with the app's initial on it — enough to judge the layout. */
+/**
+ * A stand-in app icon: a rounded brand-coloured square with the initial on it,
+ * on a TRANSPARENT background with a small margin — the way real launcher
+ * icons look. That matters for judging a design: the tile behind it is what
+ * the variant changes, so the icon must not paint that tile itself.
+ */
 private fun drawIcon(label: String, color: Int): androidx.compose.ui.graphics.ImageBitmap {
     val bmp = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bmp)
-    val fill = Paint().apply { this.color = color }
-    canvas.drawRect(0f, 0f, 256f, 256f, fill)
+    val inset = 14f
+    val fill = Paint().apply {
+        this.color = color
+        isAntiAlias = true
+    }
+    canvas.drawRoundRect(
+        inset, inset, 256f - inset, 256f - inset, 52f, 52f, fill,
+    )
     val text = Paint().apply {
         this.color = android.graphics.Color.WHITE
-        textSize = 110f
+        textSize = 104f
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
         isAntiAlias = true
     }
     val m = android.graphics.Paint.FontMetrics()
     text.getFontMetrics(m)
-    val baseline = 128f - (m.ascent + m.descent) / 2f
-    canvas.drawText(label.take(1).uppercase(), 128f, baseline, text)
+    canvas.drawText(label.take(1).uppercase(), 128f, 128f - (m.ascent + m.descent) / 2f, text)
     return bmp.asImageBitmap()
 }
