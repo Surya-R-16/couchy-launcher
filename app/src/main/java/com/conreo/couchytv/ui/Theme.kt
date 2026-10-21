@@ -1,9 +1,14 @@
 package com.conreo.couchytv.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
@@ -27,6 +32,46 @@ val WALLPAPERS = listOf(
 )
 
 fun WallpaperPreset.brush(): Brush = Brush.linearGradient(colors)
+
+/* ---------------- chrome: the one glass surface ----------------
+ * The dock panel, the status bar cluster and the stats chip are all the same
+ * material. It used to be hard-coded at each of those sites, which is how the
+ * dock drifted to a different shape and a different distance from the screen
+ * edge than the status bar. Everything visual about the chrome lives here now.
+ */
+
+/** Translucent tint behind the chrome. */
+val ChromeGlass = Color(0xB3121418)
+
+/** Hairline sheen over [ChromeGlass]; keeps the panels from reading as flat black. */
+const val CHROME_SHEEN = 0.06f
+
+/** The glass material itself: tint + sheen, clipped to [shape]. */
+fun Modifier.glassPanel(shape: Shape): Modifier = this
+    .clip(shape)
+    .background(ChromeGlass)
+    .background(Color.White.copy(alpha = CHROME_SHEEN))
+
+/* ---------------- dock geometry ----------------
+ * The dock is a floating island, so it has to clear the screen edge by more
+ * than its own corner radius — otherwise the bezel eats the bottom corners and
+ * the panel reads as a bar sliding off the screen. At the default roundness the
+ * panel radius is 18 + 14 = 32 dp, so the bottom margin is 32 dp: tangent, and
+ * about 5% of a 1080p panel, which is the overscan-safe guide.
+ */
+
+/** Distance from the screen edge to the floating dock, left and right. */
+val DOCK_MARGIN_H = 24.dp
+
+/** Distance from the bottom edge. Must exceed the panel radius (see above). */
+val DOCK_MARGIN_BOTTOM = 32.dp
+
+/** Padding between the dock's glass edge and the cards inside it. */
+val DOCK_INNER_PADDING = 12.dp
+
+/** Panel radius = card radius + this. A panel corner tighter than the cards it
+ *  holds looks pinched; the extra roundness is what makes it read as a surface. */
+val DOCK_PANEL_RADIUS_EXTRA = 14.dp
 
 /** Deterministic tile color for apps that ship no banner artwork. */
 fun tileColor(pkg: String): Color {

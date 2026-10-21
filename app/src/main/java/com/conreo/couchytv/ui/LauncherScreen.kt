@@ -1232,7 +1232,7 @@ internal fun SingleRowArea(
     // cheap corner mask. Same radius, same look at this size.
     val panelCorner = LocalCornerRadius.current
     val panelShape = remember(panelCorner) {
-        RoundedCornerShape(panelCorner + 14.dp)
+        RoundedCornerShape(panelCorner + DOCK_PANEL_RADIUS_EXTRA)
     }
     // Claim focus over the first few frames (not after a delay): otherwise the
     // focus, briefly orphaned when the old row's node leaves, snaps to the first
@@ -1245,8 +1245,8 @@ internal fun SingleRowArea(
         }
     }
     BoxWithConstraints(modifier) {
-        val innerPadding = 12.dp
-        val margin = 24.dp
+        val innerPadding = DOCK_INNER_PADDING
+        val margin = DOCK_MARGIN_H
         val available = maxWidth - margin * 2 - innerPadding * 2
         val all = apps.items
         val fit = fitSingleRow(available, all.size, maxIcon, prefGap)
@@ -1279,10 +1279,15 @@ internal fun SingleRowArea(
             ) {
                 Row(
                     Modifier
-                        .padding(horizontal = margin, vertical = 8.dp)
-                        .clip(panelShape)
-                        .background(Color(0xB3121418))
-                        .background(Color.White.copy(alpha = 0.06f))
+                        // Bottom margin, not a symmetric one: this is what lifts the
+                        // panel clear of the bezel so its rounded corners are visible.
+                        .padding(
+                            start = margin,
+                            end = margin,
+                            top = 8.dp,
+                            bottom = DOCK_MARGIN_BOTTOM,
+                        )
+                        .glassPanel(panelShape)
                         .padding(innerPadding)
                         // Down does nothing here: there is no grid to open.
                         .onPreviewKeyEvent { e ->
@@ -1519,7 +1524,7 @@ private fun DockGlassPanel(
         // clip is a cheap corner mask. Same radius, same look at this size.
         val panelCorner = LocalCornerRadius.current
         val panelShape = remember(panelCorner) {
-            RoundedCornerShape(panelCorner + 14.dp)
+            RoundedCornerShape(panelCorner + DOCK_PANEL_RADIUS_EXTRA)
         }
         // Built once: a fresh Modifier chain is never equal to the previous one,
         // so an inline one would make every card's modifier parameter change
@@ -1537,13 +1542,7 @@ private fun DockGlassPanel(
                 slideOutVertically(tween(340, easing = FastOutSlowInEasing)) { it },
             modifier = Modifier.matchParentSize(),
         ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .clip(panelShape)
-                    .background(Color(0xB3121418))
-                    .background(Color.White.copy(alpha = 0.06f))
-            )
+            Box(Modifier.fillMaxSize().glassPanel(panelShape))
         }
         // Icons — on OPEN they vanish almost instantly (the rising grid takes
         // over); on CLOSE they wait for the grid to sink back before fading in.
