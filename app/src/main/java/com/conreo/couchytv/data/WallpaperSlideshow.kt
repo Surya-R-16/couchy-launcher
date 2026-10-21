@@ -26,11 +26,18 @@ object WallpaperSlideshow {
     private const val STAMP = "slideshow-changed.at"
 
     /**
+     * Serialises the copy. Two callers really do overlap: the slideshow effect is
+     * restarted by a resume while its previous iteration is still inside a blocking
+     * write, and the settings sheet can write at the same time.
+     */
+    private val writeLock = Any()
+
+    /**
      * Replaces the current wallpaper with a random image from the folder.
      *
      * @return false when the folder is missing, empty or unreadable (nothing is changed then).
      */
-    fun applyNext(context: Context): Boolean {
+    fun applyNext(context: Context): Boolean = synchronized(writeLock) {
         val images = listImages(context)
         if (images.isEmpty()) return false
 
@@ -61,17 +68,24 @@ object WallpaperSlideshow {
      * torn bands of the JPEG. The bytes go to a temporary file first and are renamed over
      * the target, which the filesystem does in one step, so a reader sees either the old
      * image or the new one.
+     *
+     * The temporary file is unique per call, and a failed rename leaves the target alone.
+     * A shared `wallpaper.jpg.tmp` plus `target.delete()` on the retry path meant two
+     * overlapping writers raced: the loser renamed the winner's bytes away, found nothing
+     * to rename, and deleted the wallpaper — leaving the launcher with no picture on disk
+     * and the one already on screen frozen forever.
      */
-    fun writeWallpaper(context: Context, input: java.io.InputStream): Boolean = runCatching {
-        val target = File(context.filesDir, TARGET)
-        val tmp = File(context.filesDir, "$TARGET.tmp")
-        tmp.outputStream().use { out -> input.use { it.copyTo(out) } }
-        if (!tmp.renameTo(target)) {
-            target.delete()
-            if (!tmp.renameTo(target)) error("rename failed")
+    fun writeWallpaper(context: Context, input: java.io.InputStream): Boolean =
+        synchronized(writeLock) {
+            runCatching {
+                val target = File(context.filesDir, TARGET)
+                val tmp = File.createTempFile("wallpaper", ".tmp", context.filesDir)
+                tmp.outputStream().use { out -> input.use { it.copyTo(out) } }
+                val renamed = tmp.renameTo(target)
+                if (!renamed) tmp.delete()
+                renamed
+            }.getOrDefault(false)
         }
-        true
-    }.getOrDefault(false)
 
     /** When the wallpaper last changed, epoch millis; 0 when it never has. */
     fun lastChangeMs(context: Context): Long =

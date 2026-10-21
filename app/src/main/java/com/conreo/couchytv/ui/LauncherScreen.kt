@@ -559,16 +559,22 @@ fun LauncherApp(rescanTick: Int) {
         val every = config.slideshowMinutes.coerceIn(1, 240) * 60_000L
         while (true) {
             // The stamp lives in a file: read it off the main thread.
-            val lastChange = withContext(Dispatchers.IO) {
+            val before = withContext(Dispatchers.IO) {
                 com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context)
             }
-            val due = System.currentTimeMillis() - lastChange >= every
-            if (due) {
-                val changed = withContext(Dispatchers.IO) {
+            if (System.currentTimeMillis() - before >= every) {
+                withContext(Dispatchers.IO) {
                     com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
                 }
-                if (changed) wallpaperVersion++
             }
+            // Re-read the stamp instead of trusting one call's return value. The wallpaper
+            // is a file several actors write (the settings sheet, an iteration of this loop
+            // that was cancelled mid-write), and a redraw keyed on a counter only this
+            // coroutine bumps leaves a picture somebody else replaced on screen forever.
+            val after = withContext(Dispatchers.IO) {
+                com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context)
+            }
+            if (after != before) wallpaperVersion++
             // Re-check often enough that a 1-minute interval is honoured, without waking the
             // CPU needlessly on longer ones.
             delay((every / 4).coerceIn(5_000L, 30_000L))
@@ -582,10 +588,14 @@ fun LauncherApp(rescanTick: Int) {
     val wallpaperPair by produceState<Pair<ImageBitmap?, ImageBitmap?>>(
         initialValue = null to null, config.useCustomWallpaper, wallpaperVersion
     ) {
-        value = if (!config.useCustomWallpaper) null to null
-        else withContext(Dispatchers.IO) {
+        if (!config.useCustomWallpaper) {
+            value = null to null
+            return@produceState
+        }
+        val previous = value
+        val decoded = withContext(Dispatchers.IO) {
             val f = File(context.filesDir, "wallpaper.jpg")
-            if (!f.exists()) null to null
+            if (!f.exists()) null
             else runCatching {
                 // 1920 instead of the original 1280: a 4K panel upscales a 1280-wide
                 // background 3× and it reads as soft. Costs ~4 MB of RGB_565 texture
@@ -596,8 +606,13 @@ fun LauncherApp(rescanTick: Int) {
                 val blurred = decodeDownsampled(f, maxWidth = 96)
                     ?.also { it.prepareToDraw() }?.asImageBitmap()
                 sharp to blurred
-            }.getOrDefault(null to null)
+            }.getOrNull()
         }
+        // A missing or undecodable file must not blank the background: keep the picture
+        // that is already on screen until a good one lands. Only an explicit "no custom
+        // wallpaper" drops back to the preset.
+        if (decoded != null) value = decoded
+        else if (previous.first == null) value = null to null
     }
     val (wallpaperSharp, wallpaperBlurred) = wallpaperPair
     val presetBrush = remember(config.wallpaper) {
