@@ -1175,7 +1175,7 @@ private fun GridSection(
  * bar around a short row of small icons reads as an empty shelf.
  */
 @Composable
-private fun SingleRowArea(
+internal fun SingleRowArea(
     modifier: Modifier,
     apps: AppList,
     config: LauncherConfig,
