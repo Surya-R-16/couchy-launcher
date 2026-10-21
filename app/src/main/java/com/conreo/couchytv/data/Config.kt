@@ -62,6 +62,12 @@ data class LauncherConfig(
     val showVpnButton: Boolean = true,
     /** wrap the status-bar icons in the same glass panel as dock mode */
     val statusBarGlass: Boolean = true,
+    /**
+     * The RAM/storage readout in the top-left corner. Diagnostic, not chrome:
+     * off by default would silently change what existing users see, so it stays
+     * on and the settings sheet lets it be turned off.
+     */
+    val showSystemStats: Boolean = true,
     /** index into DATE_FORMATS; 0 = no date shown */
     val dateFormat: Int = 0,
     // ----- display options -----

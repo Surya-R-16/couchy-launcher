@@ -1187,6 +1187,13 @@ private fun StatusBarScreen(
         )
         SettingsItem(
             selected = false,
+            onClick = { scope.launch { store.update { it.copy(showSystemStats = !it.showSystemStats) } } },
+            headlineContent = { Text(stringResource(R.string.system_stats)) },
+            supportingContent = { Text(stringResource(R.string.system_stats_sub)) },
+            trailingContent = { CheckMark(checked = config.showSystemStats) },
+        )
+        SettingsItem(
+            selected = false,
             onClick = { scope.launch { store.update { it.copy(h24 = !it.h24) } } },
             headlineContent = { Text(stringResource(R.string.clock_24h)) },
             trailingContent = { CheckMark(checked = config.h24) },

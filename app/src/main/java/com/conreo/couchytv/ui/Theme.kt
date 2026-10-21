@@ -73,6 +73,32 @@ val DOCK_INNER_PADDING = 12.dp
  *  holds looks pinched; the extra roundness is what makes it read as a surface. */
 val DOCK_PANEL_RADIUS_EXTRA = 14.dp
 
+/* ---------------- status bar geometry ----------------
+ * The bar's height is the arithmetic, not a guess: the tallest thing in it is a
+ * 48 dp chip (40 dp control + 2 × 4 dp padding), so 48 + 2 × 16 = 80 dp. It used
+ * to be an 80 dp box with 18 dp vertical padding around 48 dp of content — which
+ * is 84 dp of content in an 80 dp box, clipped by `clipToBounds`.
+ */
+
+/** Height of the status bar, and of the collapsed strip that reveals it. */
+val STATUS_BAR_HEIGHT = 80.dp
+val STATUS_BAR_COLLAPSED = 4.dp
+
+/** Distance from the screen edge — horizontal margin of the bar. */
+val STATUS_BAR_MARGIN_H = 40.dp
+
+/** Vertical padding of the bar, inside [STATUS_BAR_HEIGHT]. */
+val STATUS_BAR_PAD_V = 16.dp
+
+/** Padding inside a glass chip (the icon cluster and the stats readout). One
+ *  value for both: they sit on the same line and a 2 dp difference in the inset
+ *  is visible at 10 ft. */
+val CHIP_PAD_H = 14.dp
+val CHIP_PAD_V = 4.dp
+
+/** Height of a chip's content: the 40 dp status-icon touch target. */
+val CHIP_CONTENT_HEIGHT = 40.dp
+
 /** Deterministic tile color for apps that ship no banner artwork. */
 fun tileColor(pkg: String): Color {
     val palette = listOf(

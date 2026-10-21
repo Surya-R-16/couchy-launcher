@@ -335,7 +335,13 @@ fun LauncherApp(rescanTick: Int) {
     // Memory + storage for the top-left readout. Refreshed on resume and once
     // a minute: both numbers move slowly, and a per-second timer would
     // recompose the home screen every second for numbers that never change.
-    val sysStats by produceState(initialValue = null as SystemStats?, resumeTick) {
+    // Keyed on the toggle as well: with the readout off, the poll stops entirely
+    // instead of reading /proc and the filesystem every minute for nothing.
+    val sysStats by produceState(initialValue = null as SystemStats?, resumeTick, config.showSystemStats) {
+        if (!config.showSystemStats) {
+            value = null
+            return@produceState
+        }
         value = readSystemStats(context)
         while (true) {
             delay(60_000L)
@@ -802,7 +808,8 @@ fun LauncherApp(rescanTick: Int) {
                 // focusable: Up from the top row slides it back into view.
                 var statusBarFocused by remember { mutableStateOf(false) }
                 val statusBarHeight by animateDpAsState(
-                    targetValue = if (config.showStatusBar || statusBarFocused) 80.dp else 4.dp,
+                    targetValue = if (config.showStatusBar || statusBarFocused) STATUS_BAR_HEIGHT
+                    else STATUS_BAR_COLLAPSED,
                     label = "statusBarHeight",
                 )
                 Box(

@@ -11,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -41,17 +40,15 @@ internal fun SystemStatsChip(
     val corner = LocalCornerRadius.current
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(corner))
-            .background(Color(0xB3121418))
-            .background(Color.White.copy(alpha = 0.06f))
-            .padding(horizontal = 14.dp, vertical = 4.dp),
+            .glassPanel(RoundedCornerShape(corner))
+            .padding(horizontal = CHIP_PAD_H, vertical = CHIP_PAD_V),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // The inner row is forced to the height of a status icon (40dp) so the
         // chip is exactly as tall as the glass cluster on the other side.
         Row(
-            modifier = Modifier.height(40.dp),
+            modifier = Modifier.height(CHIP_CONTENT_HEIGHT),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

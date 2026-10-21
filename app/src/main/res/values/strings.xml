@@ -162,6 +162,8 @@
     <string name="date_label">Date</string>
     <string name="statusbar_glass">Glass background</string>
     <string name="statusbar_glass_sub">Panel behind the status icons, like the dock — follows the roundness setting</string>
+    <string name="system_stats">RAM and storage readout</string>
+    <string name="system_stats_sub">Diagnostic chip in the top-left corner; refreshes once a minute</string>
     <string name="show_vpn_button">Show VPN button</string>
     <string name="vpn_opens">VPN button opens</string>
     <string name="vpn_system">System VPN settings</string>

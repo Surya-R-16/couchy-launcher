@@ -1,6 +1,5 @@
 package com.conreo.couchytv.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -48,16 +46,14 @@ fun StatusBar(
     val cluster = remember(glass, corner) {
         if (glass) {
             Modifier
-                .clip(RoundedCornerShape(corner))
-                .background(Color(0xB3121418))
-                .background(Color.White.copy(alpha = 0.06f))
-                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .glassPanel(RoundedCornerShape(corner))
+                .padding(horizontal = CHIP_PAD_H, vertical = CHIP_PAD_V)
         } else Modifier
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 40.dp, vertical = 18.dp),
+            .padding(horizontal = STATUS_BAR_MARGIN_H, vertical = STATUS_BAR_PAD_V),
         // The readouts sit on the left, the icon cluster on the right — both
         // centred on the same line, so the two ends of the bar line up.
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,7 +155,7 @@ private fun StatusIcon(
         colors = surfaceColors,
         scale = surfaceScale,
     ) {
-        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(CHIP_CONTENT_HEIGHT), contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
