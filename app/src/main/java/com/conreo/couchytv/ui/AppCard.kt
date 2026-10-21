@@ -38,6 +38,21 @@ import androidx.compose.foundation.BorderStroke
 import com.conreo.couchytv.data.AppEntry
 
 
+/**
+ * How a card draws itself. Three candidates were rendered side by side to pick
+ * the look; only ONE survives — delete the others once the owner has chosen.
+ */
+enum class AppCardStyle {
+    /** Coloured tile, 2dp accent ring on focus. The current look. */
+    Tile,
+
+    /** Graphite tile, heavy corner radius, no ring: the icon carries it. */
+    Graphite,
+
+    /** Full-bleed icon, no inset; focus brightens the tile and rings it white. */
+    Bare,
+}
+
 @Composable
 fun AppCard(
     app: AppEntry,
@@ -46,6 +61,7 @@ fun AppCard(
     accent: Color,
     cardWidth: androidx.compose.ui.unit.Dp = 190.dp,
     showLabel: Boolean = true,
+    style: AppCardStyle = AppCardStyle.Tile,
     // Square tile (the single-row dock): the app's own launcher icon, centred.
     // A 16:9 banner at dock size would be a sliver, so square is the only
     // readable option there.
@@ -67,7 +83,9 @@ fun AppCard(
     // INSTANCE and rebuilt the path three times per card (surface, glow,
     // border) on every recomposition. One instance per corner radius fixes it.
     val corner = LocalCornerRadius.current
-    val cardShape = remember(corner) { SmoothCornerShape(corner) }
+    // Graphite uses a much rounder tile — it is the whole point of that look.
+    val radius = if (style == AppCardStyle.Graphite) corner + 10.dp else corner
+    val cardShape = remember(radius) { SmoothCornerShape(radius) }
     var downAt by remember { mutableLongStateOf(0L) }
     var lastKeyDown by remember { mutableLongStateOf(0L) }
     var longPressAt by remember { mutableLongStateOf(0L) }
@@ -82,10 +100,21 @@ fun AppCard(
     val surfaceShape = rememberComputed(cardShape, MaterialTheme.shapes) {
         ClickableSurfaceDefaults.shape(cardShape)
     }
-    val surfaceColors = rememberComputed(app.tile, MaterialTheme.colorScheme) {
+    val tileColor = when (style) {
+        AppCardStyle.Tile -> app.tile
+        // Near-graphite, a touch of the app's own hue so it is not a grey slab.
+        AppCardStyle.Graphite -> Color(0xFF1B1D23)
+        AppCardStyle.Bare -> Color(0xFF14161B)
+    }
+    val focusTile = when (style) {
+        AppCardStyle.Tile -> tileColor
+        AppCardStyle.Graphite -> Color(0xFF2A2D35)
+        AppCardStyle.Bare -> Color(0xFF23262E)
+    }
+    val surfaceColors = rememberComputed(tileColor, focusTile, MaterialTheme.colorScheme) {
         ClickableSurfaceDefaults.colors(
-            containerColor = app.tile,
-            focusedContainerColor = app.tile,
+            containerColor = tileColor,
+            focusedContainerColor = focusTile,
             contentColor = Color.White,
             focusedContentColor = Color.White,
         )
@@ -106,13 +135,16 @@ fun AppCard(
             focusedGlow = Glow(elevationColor = Color.Transparent, elevation = 0.dp)
         )
     }
-    val surfaceBorder = rememberComputed(isMoving, accent, cardShape, MaterialTheme.colorScheme) {
+    val ringColor = if (style == AppCardStyle.Tile) accent else Color.White.copy(alpha = 0.85f)
+    val ringWidth = when {
+        isMoving -> 3.dp
+        style == AppCardStyle.Tile -> 2.dp
+        style == AppCardStyle.Graphite -> 0.dp      // no ring at all: the tile lift does it
+        else -> 2.dp
+    }
+    val surfaceBorder = rememberComputed(isMoving, ringColor, ringWidth, cardShape, MaterialTheme.colorScheme) {
         ClickableSurfaceDefaults.border(
-            // Thin accent ring on focus (thicker while dragging in move mode).
-            focusedBorder = Border(
-                BorderStroke(if (isMoving) 3.dp else 2.dp, accent),
-                shape = cardShape,
-            )
+            focusedBorder = Border(BorderStroke(ringWidth, ringColor), shape = cardShape),
         )
     }
     Surface(
@@ -160,13 +192,19 @@ fun AppCard(
                         bitmap = icon,
                         contentDescription = app.label,
                         contentScale = ContentScale.Fit,
-                        // A little air around the glyph, like a home screen.
-                        // Own render layer, like the banner path below: the focus
-                        // scale animation transforms the cached layer instead of
-                        // re-drawing (re-sampling) the bitmap every frame.
+                        // Air around the glyph, per style: Graphite floats the
+                        // icon in its tile, Bare lets it fill the tile.
+                        // Own render layer, like the banner path below, so the
+                        // bitmap is not re-sampled every frame.
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(cardWidth * 0.09f)
+                            .padding(
+                                cardWidth * when (style) {
+                                    AppCardStyle.Tile -> 0.09f
+                                    AppCardStyle.Graphite -> 0.22f
+                                    AppCardStyle.Bare -> 0.02f
+                                },
+                            )
                             .graphicsLayer { },
                     )
                     // No launcher icon (rare): crop the banner to the square

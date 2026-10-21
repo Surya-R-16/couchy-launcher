@@ -3,6 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+    // Renders Compose previews to PNG on the JVM — no device, no emulator.
+    id("app.cash.paparazzi") version "1.3.5"
 }
 
 android {
@@ -106,4 +108,5 @@ dependencies {
     // unit test so the "every app still fits" invariant is checked on every
     // build, not by staring at the TV.
     testImplementation("junit:junit:4.13.2")
+    testImplementation("app.cash.paparazzi:paparazzi:1.3.5")
 }

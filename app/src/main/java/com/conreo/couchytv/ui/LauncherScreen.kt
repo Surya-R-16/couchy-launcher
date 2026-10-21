@@ -2,6 +2,7 @@ package com.conreo.couchytv.ui
 
 import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -559,16 +560,22 @@ fun LauncherApp(rescanTick: Int) {
         val every = config.slideshowMinutes.coerceIn(1, 240) * 60_000L
         while (true) {
             // The stamp lives in a file: read it off the main thread.
-            val lastChange = withContext(Dispatchers.IO) {
+            val before = withContext(Dispatchers.IO) {
                 com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context)
             }
-            val due = System.currentTimeMillis() - lastChange >= every
-            if (due) {
-                val changed = withContext(Dispatchers.IO) {
+            if (System.currentTimeMillis() - before >= every) {
+                withContext(Dispatchers.IO) {
                     com.conreo.couchytv.data.WallpaperSlideshow.applyNext(context)
                 }
-                if (changed) wallpaperVersion++
             }
+            // Re-read the stamp instead of trusting one call's return value. The wallpaper
+            // is a file several actors write (the settings sheet, an iteration of this loop
+            // that was cancelled mid-write), and a redraw keyed on a counter only this
+            // coroutine bumps leaves a picture somebody else replaced on screen forever.
+            val after = withContext(Dispatchers.IO) {
+                com.conreo.couchytv.data.WallpaperSlideshow.lastChangeMs(context)
+            }
+            if (after != before) wallpaperVersion++
             // Re-check often enough that a 1-minute interval is honoured, without waking the
             // CPU needlessly on longer ones.
             delay((every / 4).coerceIn(5_000L, 30_000L))
@@ -582,10 +589,14 @@ fun LauncherApp(rescanTick: Int) {
     val wallpaperPair by produceState<Pair<ImageBitmap?, ImageBitmap?>>(
         initialValue = null to null, config.useCustomWallpaper, wallpaperVersion
     ) {
-        value = if (!config.useCustomWallpaper) null to null
-        else withContext(Dispatchers.IO) {
+        if (!config.useCustomWallpaper) {
+            value = null to null
+            return@produceState
+        }
+        val previous = value
+        val decoded = withContext(Dispatchers.IO) {
             val f = File(context.filesDir, "wallpaper.jpg")
-            if (!f.exists()) null to null
+            if (!f.exists()) null
             else runCatching {
                 // 1920 instead of the original 1280: a 4K panel upscales a 1280-wide
                 // background 3× and it reads as soft. Costs ~4 MB of RGB_565 texture
@@ -596,8 +607,13 @@ fun LauncherApp(rescanTick: Int) {
                 val blurred = decodeDownsampled(f, maxWidth = 96)
                     ?.also { it.prepareToDraw() }?.asImageBitmap()
                 sharp to blurred
-            }.getOrDefault(null to null)
+            }.getOrNull()
         }
+        // A missing or undecodable file must not blank the background: keep the picture
+        // that is already on screen until a good one lands. Only an explicit "no custom
+        // wallpaper" drops back to the preset.
+        if (decoded != null) value = decoded
+        else if (previous.first == null) value = null to null
     }
     val (wallpaperSharp, wallpaperBlurred) = wallpaperPair
     val presetBrush = remember(config.wallpaper) {
@@ -709,12 +725,26 @@ fun LauncherApp(rescanTick: Int) {
             } else if (config.useVideoWallpaper && config.videoUri.isNotEmpty()) {
                 VideoWallpaper(uri = config.videoUri, speed = videoSpeed, loop = true, coverBrush = presetBrush)
             } else if (wallpaperSharp != null) {
-                Image(
-                    bitmap = wallpaperSharp,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                // Crossfade between slideshow pictures. Both bitmaps are already decoded,
+                // so the fade is two alpha-blended full-screen blits per frame for 400 ms —
+                // no decode, no blur, no extra window (a Dialog is what costs 600–800 ms
+                // here). The price is memory, not frame time: during the fade two 1920-wide
+                // RGB_565 bitmaps are resident, ~8 MB instead of ~4 MB.
+                // Deliberately short: this TV misses vsync when a long animation runs over
+                // a full-screen composite.
+                Crossfade(
+                    targetState = wallpaperSharp,
+                    animationSpec = tween(400),
+                    label = "wallpaperFade",
                     modifier = Modifier.fillMaxSize(),
-                )
+                ) { bitmap ->
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             } else {
                 Box(Modifier.fillMaxSize().background(presetBrush))
             }
@@ -1175,7 +1205,7 @@ private fun GridSection(
  * bar around a short row of small icons reads as an empty shelf.
  */
 @Composable
-private fun SingleRowArea(
+internal fun SingleRowArea(
     modifier: Modifier,
     apps: AppList,
     config: LauncherConfig,
@@ -1187,6 +1217,9 @@ private fun SingleRowArea(
     intro: Boolean,
     onLaunch: (AppEntry) -> Unit,
     onMenu: (AppEntry) -> Unit,
+    // Which card look to draw. A design-selection knob; defaults to the
+    // current look so nothing changes for the app itself.
+    style: AppCardStyle = AppCardStyle.Tile,
 ) {
     val rowFocus = remember { FocusRequester() }
     // The focus modifiers are built ONCE: a fresh Modifier chain is never equal
@@ -1266,6 +1299,7 @@ private fun SingleRowArea(
                             accent = accent,
                             cardWidth = fit.icon,
                             square = true,
+                            style = style,
                             // No labels: at dock size a name under every icon
                             // would eat the whole row.
                             showLabel = false,
