@@ -2,6 +2,7 @@ package com.conreo.couchytv.ui
 
 import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -724,12 +725,26 @@ fun LauncherApp(rescanTick: Int) {
             } else if (config.useVideoWallpaper && config.videoUri.isNotEmpty()) {
                 VideoWallpaper(uri = config.videoUri, speed = videoSpeed, loop = true, coverBrush = presetBrush)
             } else if (wallpaperSharp != null) {
-                Image(
-                    bitmap = wallpaperSharp,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                // Crossfade between slideshow pictures. Both bitmaps are already decoded,
+                // so the fade is two alpha-blended full-screen blits per frame for 400 ms —
+                // no decode, no blur, no extra window (a Dialog is what costs 600–800 ms
+                // here). The price is memory, not frame time: during the fade two 1920-wide
+                // RGB_565 bitmaps are resident, ~8 MB instead of ~4 MB.
+                // Deliberately short: this TV misses vsync when a long animation runs over
+                // a full-screen composite.
+                Crossfade(
+                    targetState = wallpaperSharp,
+                    animationSpec = tween(400),
+                    label = "wallpaperFade",
                     modifier = Modifier.fillMaxSize(),
-                )
+                ) { bitmap ->
+                    Image(
+                        bitmap = bitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             } else {
                 Box(Modifier.fillMaxSize().background(presetBrush))
             }
