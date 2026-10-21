@@ -10,6 +10,7 @@ order the surfaces are being reworked. Same surface, same wallpaper, same state
 |---|---|
 | `00-before-home.png` | Single row layout, top-left RAM/storage readout, 6 pinned apps, focus on the first icon |
 | `01-before-settings.png` | The settings sheet (Main screen) |
+| `02-after-home.png` | Same surface after the dock and status-bar pass: the dock floats clear of the bezel (32 dp bottom margin), both status chips share one glass material and one inset, focus ring on the first icon. The wallpaper differs from `00-before-home.png` — the slideshow rotates every minute and the two shots were taken days apart. |
 
 ## Ground rules for a reference
 
