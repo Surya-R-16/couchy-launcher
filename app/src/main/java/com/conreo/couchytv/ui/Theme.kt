@@ -42,24 +42,34 @@ fun WallpaperPreset.brush(): Brush = Brush.linearGradient(colors)
  * edge than the status bar. Everything visual about the chrome lives here now.
  */
 
-/** Translucent tint behind the chrome. Darker than it was (was 0xB3121418, 70%
- *  opaque): at 70% a bright wallpaper bled through and the dock picked up the
- *  picture's colour, so the "glass" changed hue with the slideshow. At 85% the
- *  panel stays neutral on every wallpaper and the icons sit on a quiet bed. */
-val ChromeGlass = Color(0xD90E1015)
+/** Translucent charcoal, ~90% opaque. Darker than the original 0xB3121418 (70%):
+ *  at 70% a bright wallpaper bled through and the dock picked up the picture's
+ *  colour, so the "glass" changed hue with the slideshow. */
+val ChromeGlass = Color(0xED0E1015)
 
-/** Hairline sheen over [ChromeGlass]; keeps the panels from reading as flat black. */
+/**
+ * The glass BODY: a shallow vertical gradient, lighter at the top edge, settling
+ * into a darker base. That is what reads as a glass surface with thickness — one
+ * draw pass with a brush, no blur, no extra layer, no shadow. Allocated once
+ * (top level), never per frame, like the scrim brushes above.
+ */
+val ChromeGlassBrush = Brush.verticalGradient(
+    0f to Color(0xF2151A21),
+    0.55f to Color(0xEF10131A),
+    1f to Color(0xF0090B0F),
+)
+
+/** Hairline sheen, kept for the callers that want a flat tint. */
 const val CHROME_SHEEN = 0.06f
 
 /** 1 dp edge around a glass panel: without it the panel's silhouette dissolves
  *  into a dark wallpaper. A stroke, not a blur — no extra layer, no mask. */
-val CHROME_EDGE = Color.White.copy(alpha = 0.09f)
+val CHROME_EDGE = Color.White.copy(alpha = 0.11f)
 
-/** The glass material itself: tint + sheen + edge, clipped to [shape]. */
+/** The glass material itself: gradient body + hairline edge, clipped to [shape]. */
 fun Modifier.glassPanel(shape: Shape): Modifier = this
     .clip(shape)
-    .background(ChromeGlass)
-    .background(Color.White.copy(alpha = CHROME_SHEEN))
+    .background(ChromeGlassBrush)
     .border(1.dp, CHROME_EDGE, shape)
 
 /* ---------------- dock geometry ----------------
@@ -71,19 +81,20 @@ fun Modifier.glassPanel(shape: Shape): Modifier = this
  */
 
 /** Distance from the screen edge to the floating dock, left and right. */
-val DOCK_MARGIN_H = 24.dp
+val DOCK_MARGIN_H = 20.dp
 
-/** Distance from the bottom edge. Must exceed the panel radius (see above). */
-val DOCK_MARGIN_BOTTOM = 32.dp
+/** Distance from the bottom edge. Must exceed the panel radius (see below);
+ *  the effective value is derived per roundness setting. */
+val DOCK_MARGIN_BOTTOM = 20.dp
 
 /** Padding between the dock's glass edge and the cards inside it. */
-val DOCK_INNER_PADDING = 14.dp
+val DOCK_INNER_PADDING = 12.dp
 
 /** Panel radius = card radius + this. A panel corner tighter than the cards it
  *  holds looks pinched; the extra roundness is what makes it read as a surface.
- *  14 read as a pill at dock size — 10 keeps the corner crisp and still softer
- *  than the tiles inside it. */
-val DOCK_PANEL_RADIUS_EXTRA = 10.dp
+ *  14 read as a pill; 10 was still pill-ish over a 100 dp tile; 6 keeps the
+ *  corner crisp, which is what "compact" needs. */
+val DOCK_PANEL_RADIUS_EXTRA = 6.dp
 
 /** How far a panel corner must clear the screen edge, on top of the radius, so
  *  the rounded corner is fully visible rather than sliced by the bezel. */
@@ -135,6 +146,13 @@ fun tileColor(pkg: String): Color {
 /** The neutral bed every tile is pulled toward, and by how much. */
 val TileBed = Color(0xFF12141A)
 const val TILE_MUTE = 0.45f
+
+/**
+ * Container behind an overridden app icon. Slightly lighter than the dock glass
+ * on purpose: the tile has to stay visible as a container, or the glyphs read as
+ * loose symbols floating on the panel and the row loses its affordance.
+ */
+val NeutralTile = Color(0xFF232733)
 
 @Composable
 fun LiteTvTheme(accent: Color, content: @Composable () -> Unit) {

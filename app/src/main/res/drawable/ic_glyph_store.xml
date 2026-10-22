@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Triangle in three of the four brand hues. Deliberately not the store's
+         four-part mark: enough to recognise, nothing traced. -->
+    <path
+        android:fillColor="#FF4285F4"
+        android:pathData="M3.5,3.5L11.3,12L3.5,20.5z" />
+    <path
+        android:fillColor="#FF34A853"
+        android:pathData="M3.5,3.5L20.5,12L11.3,12z" />
+    <path
+        android:fillColor="#FFEA4335"
+        android:pathData="M3.5,20.5L20.5,12L11.3,12z" />
+</vector>

@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import com.conreo.couchytv.ui.NeutralTile
 import com.conreo.couchytv.ui.tileColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -37,6 +38,12 @@ data class AppEntry(
     val stamp: Long,
     /** firstInstallTime — tiebreak so a newly installed app sorts last in its section. */
     val firstInstall: Long,
+    /**
+     * True when [icon] is one of the launcher's own glyphs (see IconOverrides)
+     * rather than the package's own launcher icon. Part of the reuse check: an
+     * app that gains or loses an override must not be served a stale entry.
+     */
+    val iconOverride: Boolean = false,
 )
 
 object AppRepository {
@@ -126,7 +133,15 @@ object AppRepository {
                 // Size is baked into the name: a density change (or the earlier
                 // fixed-size caches) regenerates instead of loading a stale size.
                 val bannerName = "$pkg-$stamp-b$bannerW.webp"
-                val iconName = "$pkg-$stamp-i$ICON_PX.webp"
+                val override = ICON_OVERRIDES[pkg]
+                // The override version and the flag are in the name: changing a
+                // glyph, or an app joining the table, regenerates exactly that
+                // app's bitmap and leaves every other cache alone.
+                val iconName = if (override != null) {
+                    "$pkg-$stamp-o$ICON_OVERRIDE_VERSION-$ICON_PX.webp"
+                } else {
+                    "$pkg-$stamp-i$ICON_PX.webp"
+                }
 
                 // A banner app used to skip the icon entirely (icon = null).
                 // The single-row layout shows square launcher icons, so every app
@@ -134,6 +149,7 @@ object AppRepository {
                 // are the old 128px ones — the width check invalidates both.
                 previous?.get(pkg)?.takeIf {
                     it.stamp == stamp &&
+                        it.iconOverride == (override != null) &&
                         !(it.banner != null && it.icon == null) &&
                         (it.icon == null || it.icon.width == ICON_PX)
                 }?.let { cached ->
@@ -158,7 +174,8 @@ object AppRepository {
                 // ~150dp, which at TV density is wider than 128px. Sharp on the
                 // fallback tile even on 4K panels.
                 val icon = cachedBitmap(cacheDir, iconName, Bitmap.Config.ARGB_8888) {
-                    runCatching { ri.loadIcon(pm)?.toBitmap(ICON_PX, ICON_PX) }.getOrNull()
+                    if (override != null) rasterizeGlyph(context, override.glyph, ICON_PX)
+                    else runCatching { ri.loadIcon(pm)?.toBitmap(ICON_PX, ICON_PX) }.getOrNull()
                 }
                 if (banner != null) validCacheNames.add(bannerName)
                 if (icon != null) validCacheNames.add(iconName)
@@ -173,9 +190,13 @@ object AppRepository {
                     banner = banner?.asImageBitmap(),
                     icon = icon?.asImageBitmap(),
                     autoCategory = autoCategory(ai.applicationInfo),
-                    tile = tileColor(pkg),
+                    // An override carries its own colour, so the container behind
+                    // it is the shared neutral tile: one visual system, not a row
+                    // of differently coloured blocks.
+                    tile = if (override != null) NeutralTile else tileColor(pkg),
                     stamp = stamp,
                     firstInstall = firstInstall,
+                    iconOverride = override != null,
                 )
             }
         }.awaitAll()
@@ -223,6 +244,20 @@ object AppRepository {
         }
         return bmp
     }
+
+    /**
+     * Rasterises one of the launcher's own vector glyphs at [size] px.
+     *
+     * Runs inside [cachedBitmap], i.e. on the scan dispatcher and only on a cache
+     * miss — never during composition, never on a key press. The result is a plain
+     * ARGB_8888 bitmap like any other icon, so drawing it is the same texture blit
+     * the app already does.
+     */
+    private fun rasterizeGlyph(context: Context, @androidx.annotation.DrawableRes res: Int, size: Int): Bitmap? =
+        runCatching {
+            val d = context.getDrawable(res) ?: return null
+            d.toBitmap(size, size, Bitmap.Config.ARGB_8888)
+        }.getOrNull()
 
     private fun autoCategory(ai: ApplicationInfo?): String {
         ai ?: return "apps"
