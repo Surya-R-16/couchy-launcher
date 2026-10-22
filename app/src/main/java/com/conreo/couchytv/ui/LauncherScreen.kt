@@ -99,8 +99,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Icon size steps (card width) — 5 levels for fine control. */
-val ICON_SIZES = listOf(120.dp, 150.dp, 190.dp, 230.dp, 270.dp)
+/** Icon size steps (card width) — 5 levels for fine control.
+ *
+ *  Was 120/150/190/230/270 dp. Scaled by ~0.83 for the compact dock: the tiles
+ *  were 15% of the screen height and the dock read as a shelf, not an island.
+ *  The config stores the INDEX, not the size, so this is a table change, not a
+ *  format change. */
+val ICON_SIZES = listOf(100.dp, 125.dp, 160.dp, 190.dp, 225.dp)
 
 /** Allocated ONCE — recomposition never rebuilds the scrim brushes. */
 // Full: darkens the whole wallpaper evenly.
@@ -131,12 +136,14 @@ private val ScrimBottom = Brush.verticalGradient(
     0.80f to Color.Black.copy(alpha = 0f),
     1.0f to Color.Black.copy(alpha = 0.5f),
 )
-/** Spacing steps between cards — 5 levels. */
-val GAP_SIZES = listOf(4.dp, 10.dp, 16.dp, 24.dp, 32.dp)
+/** Spacing steps between cards — 5 levels. Scaled with the tiles (~0.8) so a
+ *  gap keeps its proportion to the icon instead of eating the row. */
+val GAP_SIZES = listOf(4.dp, 8.dp, 12.dp, 18.dp, 24.dp)
 /** Video wallpaper playback speeds (index stored in config.videoSpeed). */
 val VIDEO_SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f)
-/** Icon corner roundness steps (index stored in config.cornerRadius). */
-val CORNER_RADII = listOf(0.dp, 4.dp, 10.dp, 18.dp, 28.dp)
+/** Icon corner roundness steps (index stored in config.cornerRadius).
+ *  Scaled with the tiles: 18 dp of corner on a 100 dp tile is a lozenge. */
+val CORNER_RADII = listOf(0.dp, 4.dp, 8.dp, 14.dp, 22.dp)
 /** Manual whole-UI scale steps (config.uiScale 1..5). <1 = more compact. */
 val UI_SCALES = listOf(0.75f, 0.9f, 1.0f, 1.15f, 1.3f)
 
