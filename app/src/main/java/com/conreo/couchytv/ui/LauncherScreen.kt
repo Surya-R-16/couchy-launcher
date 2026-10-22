@@ -1241,6 +1241,13 @@ internal fun SingleRowArea(
     val panelShape = remember(panelCorner) {
         RoundedCornerShape(panelCorner + DOCK_PANEL_RADIUS_EXTRA)
     }
+    // Derived, not fixed: at the roundest setting the panel radius is 38 dp, and
+    // a 32 dp bottom margin would slice the corner off again — the exact bug the
+    // fixed margin was introduced to fix.
+    val bottomMargin = maxOf(
+        DOCK_MARGIN_BOTTOM,
+        panelCorner + DOCK_PANEL_RADIUS_EXTRA + DOCK_EDGE_CLEARANCE,
+    )
     // Claim focus over the first few frames (not after a delay): otherwise the
     // focus, briefly orphaned when the old row's node leaves, snaps to the first
     // focusable — the status-bar icon — and flashes selected before we grab it.
@@ -1292,7 +1299,7 @@ internal fun SingleRowArea(
                             start = margin,
                             end = margin,
                             top = 8.dp,
-                            bottom = DOCK_MARGIN_BOTTOM,
+                            bottom = bottomMargin,
                         )
                         .glassPanel(panelShape)
                         .padding(innerPadding)

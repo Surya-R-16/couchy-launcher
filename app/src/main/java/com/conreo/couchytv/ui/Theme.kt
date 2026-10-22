@@ -1,6 +1,7 @@
 package com.conreo.couchytv.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -8,6 +9,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
@@ -40,17 +42,25 @@ fun WallpaperPreset.brush(): Brush = Brush.linearGradient(colors)
  * edge than the status bar. Everything visual about the chrome lives here now.
  */
 
-/** Translucent tint behind the chrome. */
-val ChromeGlass = Color(0xB3121418)
+/** Translucent tint behind the chrome. Darker than it was (was 0xB3121418, 70%
+ *  opaque): at 70% a bright wallpaper bled through and the dock picked up the
+ *  picture's colour, so the "glass" changed hue with the slideshow. At 85% the
+ *  panel stays neutral on every wallpaper and the icons sit on a quiet bed. */
+val ChromeGlass = Color(0xD90E1015)
 
 /** Hairline sheen over [ChromeGlass]; keeps the panels from reading as flat black. */
 const val CHROME_SHEEN = 0.06f
 
-/** The glass material itself: tint + sheen, clipped to [shape]. */
+/** 1 dp edge around a glass panel: without it the panel's silhouette dissolves
+ *  into a dark wallpaper. A stroke, not a blur — no extra layer, no mask. */
+val CHROME_EDGE = Color.White.copy(alpha = 0.09f)
+
+/** The glass material itself: tint + sheen + edge, clipped to [shape]. */
 fun Modifier.glassPanel(shape: Shape): Modifier = this
     .clip(shape)
     .background(ChromeGlass)
     .background(Color.White.copy(alpha = CHROME_SHEEN))
+    .border(1.dp, CHROME_EDGE, shape)
 
 /* ---------------- dock geometry ----------------
  * The dock is a floating island, so it has to clear the screen edge by more
@@ -67,11 +77,17 @@ val DOCK_MARGIN_H = 24.dp
 val DOCK_MARGIN_BOTTOM = 32.dp
 
 /** Padding between the dock's glass edge and the cards inside it. */
-val DOCK_INNER_PADDING = 12.dp
+val DOCK_INNER_PADDING = 14.dp
 
 /** Panel radius = card radius + this. A panel corner tighter than the cards it
- *  holds looks pinched; the extra roundness is what makes it read as a surface. */
-val DOCK_PANEL_RADIUS_EXTRA = 14.dp
+ *  holds looks pinched; the extra roundness is what makes it read as a surface.
+ *  14 read as a pill at dock size — 10 keeps the corner crisp and still softer
+ *  than the tiles inside it. */
+val DOCK_PANEL_RADIUS_EXTRA = 10.dp
+
+/** How far a panel corner must clear the screen edge, on top of the radius, so
+ *  the rounded corner is fully visible rather than sliced by the bezel. */
+val DOCK_EDGE_CLEARANCE = 4.dp
 
 /* ---------------- status bar geometry ----------------
  * The bar's height is the arithmetic, not a guess: the tallest thing in it is a
@@ -99,7 +115,12 @@ val CHIP_PAD_V = 4.dp
 /** Height of a chip's content: the 40 dp status-icon touch target. */
 val CHIP_CONTENT_HEIGHT = 40.dp
 
-/** Deterministic tile color for apps that ship no banner artwork. */
+/** Deterministic tile color for apps that ship no banner artwork.
+ *
+ * Muted toward [TileBed]: a row of tiles at full palette saturation read as six
+ * coloured blocks competing with the icons on them. The hue survives, so an app
+ * still has "its" colour — it just sits on the same quiet bed as its neighbours.
+ * App artwork itself is never recoloured. */
 fun tileColor(pkg: String): Color {
     val palette = listOf(
         Color(0xFF37474F), Color(0xFF4E342E), Color(0xFF1B5E20),
@@ -108,8 +129,12 @@ fun tileColor(pkg: String): Color {
     )
     var h = 0
     for (c in pkg) h = h * 31 + c.code
-    return palette[((h % palette.size) + palette.size) % palette.size]
+    return lerp(palette[((h % palette.size) + palette.size) % palette.size], TileBed, TILE_MUTE)
 }
+
+/** The neutral bed every tile is pulled toward, and by how much. */
+val TileBed = Color(0xFF12141A)
+const val TILE_MUTE = 0.45f
 
 @Composable
 fun LiteTvTheme(accent: Color, content: @Composable () -> Unit) {
