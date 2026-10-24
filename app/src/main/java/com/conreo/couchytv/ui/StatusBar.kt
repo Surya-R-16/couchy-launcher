@@ -143,12 +143,20 @@ private fun StatusIcon(
     val surfaceColors = rememberComputed(MaterialTheme.colorScheme) {
         ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
-            focusedContainerColor = Color.White.copy(alpha = 0.22f),
+            // The focused state is a filled pill: instant (a state change, not an
+            // animation), legible at 3 m, and it does not move the glyph. Bumped
+            // from 0.22f to 0.35f when the scale went away — the fill is now the
+            // whole focus signal, so it has to carry it alone.
+            focusedContainerColor = Color.White.copy(alpha = 0.35f),
             contentColor = Color.White,
             focusedContentColor = Color.White,
         )
     }
-    val surfaceScale = remember { ClickableSurfaceDefaults.scale(focusedScale = 1.18f) }
+    // No growth on focus. tv-material's default scale tween runs ~300 ms — 13
+    // frames per key press on this TV — for an animation over a region that is
+    // 40 dp wide. The fill above carries the focused state instead, the same
+    // bargain as the app cards (static ring, no scale).
+    val surfaceScale = remember { ClickableSurfaceDefaults.scale(focusedScale = 1f) }
     Surface(
         onClick = onClick,
         shape = surfaceShape,
