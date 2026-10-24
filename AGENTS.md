@@ -24,7 +24,35 @@ Changing the applicationId would force an uninstall, which wipes the user's conf
 cd ~/Projects/couchy-launcher
 export ANDROID_HOME=$HOME/Android/Sdk JAVA_HOME=$(mise where java)
 ./gradlew assembleDebug testDebugUnitTest     # build + unit tests
+./gradlew assembleRelease -PlocalSign         # daily-driver build (see below)
 ```
+
+## Build variant: debug for development, release for the TV
+
+The TV's daily driver is the **release** build, signed with the debug key
+(`-PlocalSign`), installed with a plain `adb install -r`. It is ~5× smaller
+(2.3 MB vs 12.5 MB) and starts **6.5× faster**.
+
+Measured (2026-10-24, `am force-stop` + `am start -W`, only `LaunchState: COLD`
+runs count — after a force-stop the system relaunches HOME on its own, which
+races the next `am start` into a warm `UNKNOWN/TotalTime 0`):
+
+| build | cold Displayed (first frame) |
+|---|---|
+| debug | 3,436–3,534 ms (3 valid runs) |
+| release | 495–583 ms (6 valid runs, median ~520 ms) |
+
+The whole gap is build-type overhead (JIT + class loading on this MTK TV), not
+app code. Two rules follow:
+
+1. **Startup numbers are only meaningful on a release build.** The row-nav
+   bench (`tools/bench-navigation.sh`) is insensitive to this — it reads the
+   same on both — but any cold-start claim measured on debug is wrong.
+2. Never treat a debug build's slowness as a production performance problem.
+   Develop in debug, validate on the TV in release.
+
+The release APK is debug-signed: fine for this TV, **not** a distribution
+artifact. F-Droid releases are built and signed by F-Droid.
 
 The Android SDK was deleted from this machine once and had to be reinstalled. If the
 build fails with a missing `android.jar`, reinstall `platforms;android-34` and
